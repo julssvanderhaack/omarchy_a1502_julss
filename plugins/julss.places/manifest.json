@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.places",
+  "name": "Places",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Marcadores de Nautilus y medios extraibles conectados, con acceso rapido a sus carpetas y expulsion segura",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Places",
+    "description": "Marcadores de Nautilus y dispositivos extraibles conectados",
+    "category": "Files",
+    "allowMultiple": false
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.notifications",
+  "name": "Notifications",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Gestor de notificaciones: muestra el historial guardado por Omarchy y permite borrarlo entero",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Notificaciones",
+    "description": "Historial de notificaciones con boton para borrarlas todas",
+    "category": "System",
+    "allowMultiple": false
+  }
+}

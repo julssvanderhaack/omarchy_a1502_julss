@@ -1,0 +1,23 @@
+#!/bin/bash
+# Filename search backing the menu's live "type to search files" feature.
+# Prints one absolute path per line; QML does the relevance sorting.
+set -uo pipefail
+
+query="${1:-}"
+trimmed="${query//[[:space:]]/}"
+[[ -n "$trimmed" ]] || exit 0
+
+exec fd \
+  --type f \
+  --ignore-case \
+  --one-file-system \
+  --max-results 40 \
+  --exclude node_modules \
+  --exclude .cache \
+  --exclude .steam \
+  --exclude Steam \
+  --exclude __pycache__ \
+  --exclude .venv \
+  --exclude venv \
+  --exclude '.local/share/Trash' \
+  -- "$query" "$HOME" 2>/dev/null

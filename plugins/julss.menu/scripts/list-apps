@@ -1,0 +1,114 @@
+#!/usr/bin/env python3
+"""Lists launchable desktop applications as JSON.
+
+Standalone replacement for the host's AppLibrary service, which the Omarchy
+shell does not currently wire up for cloned "menu" plugins (a platform
+limitation, not something a plugin can fix). Reads .desktop files from the
+standard XDG locations directly, honoring NoDisplay/Hidden and picking the
+localized Name/GenericName for the current locale.
+"""
+import glob
+import json
+import os
+
+
+def locale_candidates():
+    raw = os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or ""
+    raw = raw.split(".")[0].split("@")[0]  # strip encoding/modifier: es_ES.UTF-8 -> es_ES
+    if not raw:
+        return []
+    parts = raw.split("_")
+    return [raw, parts[0]] if len(parts) > 1 else [raw]
+
+
+LOCALES = locale_candidates()
+
+
+def desktop_dirs():
+    dirs = [os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")]
+    xdg_data_dirs = os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share"
+    dirs.extend(xdg_data_dirs.split(":"))
+
+    seen = set()
+    ordered = []
+    for base in dirs:
+        if not base:
+            continue
+        path = os.path.join(base, "applications")
+        if path not in seen:
+            seen.add(path)
+            ordered.append(path)
+    return ordered
+
+
+def parse_desktop_file(path):
+    entry = {}
+    in_main_section = False
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            for line in handle:
+                line = line.rstrip("\n")
+                if not line or line.startswith("#"):
+                    continue
+                if line.startswith("["):
+                    in_main_section = line.strip() == "[Desktop Entry]"
+                    continue
+                if not in_main_section or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                if key not in entry:
+                    entry[key] = value.strip()
+    except OSError:
+        return None
+    return entry
+
+
+def localized(entry, key):
+    for locale in LOCALES:
+        value = entry.get(key + "[" + locale + "]")
+        if value:
+            return value
+    return entry.get(key, "")
+
+
+def collect_apps():
+    apps = {}
+    for directory in desktop_dirs():
+        for path in glob.glob(os.path.join(directory, "*.desktop")):
+            entry = parse_desktop_file(path)
+            if not entry:
+                continue
+            if entry.get("Type", "Application") != "Application":
+                continue
+            if entry.get("NoDisplay", "false").lower() == "true":
+                continue
+            if entry.get("Hidden", "false").lower() == "true":
+                continue
+
+            app_id = os.path.splitext(os.path.basename(path))[0]
+            if app_id in apps:
+                continue  # first hit wins: XDG_DATA_HOME is searched first
+
+            name = localized(entry, "Name")
+            if not name:
+                continue
+
+            keywords = [k for k in localized(entry, "Keywords").split(";") if k]
+
+            apps[app_id] = {
+                "id": app_id,
+                "name": name,
+                "genericName": localized(entry, "GenericName"),
+                "icon": entry.get("Icon", ""),
+                "keywords": keywords,
+            }
+    return list(apps.values())
+
+
+def main():
+    print(json.dumps(collect_apps()))
+
+
+if __name__ == "__main__":
+    main()
