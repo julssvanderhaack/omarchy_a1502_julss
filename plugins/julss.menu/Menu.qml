@@ -433,7 +433,11 @@ Item {
   // MenuModel.mergeAppRows() merge the native path uses, so every other row
   // (icons, search, the "apps" alphabetical sort) behaves identically.
   function mergeOwnAppRows() {
-    if (!appsListProc.running) appsListProc.running = true
+    if (appsListProc.running) return
+    // Reset before every run: the buffer otherwise keeps the previous run's
+    // JSON, so any reload after the first one fails to parse and empties Apps.
+    appsListProc.collected = ""
+    appsListProc.running = true
   }
 
   function updateOwnAppRows(raw) {
