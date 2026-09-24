@@ -13,6 +13,7 @@ omarchy/
 bin/                            # ~/.local/bin/ — scripts usados por el menú
 ├── julss-flatpak-install       # Instalar → Flatpak (fzf sobre Flathub)
 └── julss-flatpak-remove        # Desinstalar → Flatpak
+bash/bashrc                     # ~/.bashrc — carga ble.sh (autosugerencias tipo fish)
 plugins/                        # Plugins propios de la barra (~/.config/omarchy/plugins/)
 ├── julss.clock/                # Reloj con formato/verticalFormat personalizados
 ├── julss.menu/                 # Menú/launcher propio
@@ -36,6 +37,16 @@ hyprctl reload
 
 `install.sh` copia (no enlaza) cada fichero a su sitio bajo `~/.config/` (y los scripts de `bin/` a `~/.local/bin/`),
 haciendo backup con timestamp de lo que ya exista.
+
+## Autosugerencias en bash (ble.sh)
+
+`bash/bashrc` carga [ble.sh](https://github.com/akinomyoga/ble.sh) si está instalado
+(sugerencias en gris desde el historial; → o Ctrl+F acepta, Alt+F acepta una palabra).
+Hace falta la versión git, la estable 0.3 no trae autosugerencias:
+
+```bash
+yay -S blesh-git
+```
 
 ## Flatpak
 

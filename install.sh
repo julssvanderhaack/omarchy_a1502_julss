@@ -32,6 +32,9 @@ for f in "$REPO_DIR"/bin/*; do
   backup_and_copy "$f" "$HOME/.local/bin/$(basename "$f")"
 done
 
+# ~/.bashrc (carga ble.sh para autosugerencias si está instalado)
+backup_and_copy "$REPO_DIR/bash/bashrc" "$HOME/.bashrc"
+
 # own plugins
 for p in "$REPO_DIR"/plugins/*/; do
   name=$(basename "$p")

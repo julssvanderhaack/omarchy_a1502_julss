@@ -57,9 +57,9 @@
           "showPercentage": true
         },
         {
-          "id": "julss.clock",
           "format": "h:mm:ss AP",
           "formatAlt": "d MMMM 'W'ww yyyy",
+          "id": "julss.clock",
           "verticalFormat": "HH\n—\nmm"
         },
         {
