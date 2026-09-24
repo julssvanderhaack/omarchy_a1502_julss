@@ -1,0 +1,25 @@
+#!/bin/bash
+
+# Fuzzy-finder TUI for picking Flathub apps to install (mirrors omarchy-pkg-install).
+
+fzf_args=(
+  --multi
+  --delimiter '\t'
+  --preview 'flatpak remote-info flathub {1}'
+  --preview-label='alt-p: toggle description, alt-j/k: scroll, tab: multi-select'
+  --preview-label-pos='bottom'
+  --preview-window 'down:65%:wrap'
+  --bind 'alt-p:toggle-preview'
+  --bind 'alt-d:preview-half-page-down,alt-u:preview-half-page-up'
+  --bind 'alt-k:preview-up,alt-j:preview-down'
+  --color 'pointer:green,marker:green'
+)
+
+app_ids=$(flatpak remote-ls flathub --app --columns=application,name | sort -u | fzf "${fzf_args[@]}" | cut -f1)
+
+if [[ -n $app_ids ]]; then
+  source omarchy-sudo-keepalive
+
+  echo "$app_ids" | tr '\n' ' ' | xargs sudo flatpak install -y --noninteractive flathub
+  omarchy-show-done
+fi

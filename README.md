@@ -10,6 +10,9 @@ hypr/                           # ~/.config/hypr/ (overrides personales, no los 
 omarchy/
 ├── shell.json                  # ~/.config/omarchy/shell.json — layout de la barra
 └── extensions/omarchy-menu.jsonc  # ~/.config/omarchy/extensions/omarchy-menu.jsonc
+bin/                            # ~/.local/bin/ — scripts usados por el menú
+├── julss-flatpak-install       # Instalar → Flatpak (fzf sobre Flathub)
+└── julss-flatpak-remove        # Desinstalar → Flatpak
 plugins/                        # Plugins propios de la barra (~/.config/omarchy/plugins/)
 ├── julss.clock/                # Reloj con formato/verticalFormat personalizados
 ├── julss.menu/                 # Menú/launcher propio
@@ -31,8 +34,18 @@ omarchy restart shell
 hyprctl reload
 ```
 
-`install.sh` copia (no enlaza) cada fichero a su sitio bajo `~/.config/`,
+`install.sh` copia (no enlaza) cada fichero a su sitio bajo `~/.config/` (y los scripts de `bin/` a `~/.local/bin/`),
 haciendo backup con timestamp de lo que ya exista.
+
+## Flatpak
+
+Las entradas *Instalar → Flatpak* y *Desinstalar → Flatpak* del menú necesitan
+`flatpak` con el remoto Flathub a nivel de sistema:
+
+```bash
+omarchy pkg add flatpak
+sudo flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+```
 
 ## Plugins y temas de terceros a reinstalar aparte
 

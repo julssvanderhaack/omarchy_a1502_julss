@@ -27,6 +27,11 @@ done
 backup_and_copy "$REPO_DIR/omarchy/shell.json" "$CONFIG_DIR/omarchy/shell.json"
 backup_and_copy "$REPO_DIR/omarchy/extensions/omarchy-menu.jsonc" "$CONFIG_DIR/omarchy/extensions/omarchy-menu.jsonc"
 
+# own scripts (menu actions) into ~/.local/bin
+for f in "$REPO_DIR"/bin/*; do
+  backup_and_copy "$f" "$HOME/.local/bin/$(basename "$f")"
+done
+
 # own plugins
 for p in "$REPO_DIR"/plugins/*/; do
   name=$(basename "$p")

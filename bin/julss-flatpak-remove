@@ -1,0 +1,34 @@
+#!/bin/bash
+
+# Fuzzy-finder TUI for picking installed Flatpak apps to remove (mirrors omarchy-pkg-remove).
+
+fzf_args=(
+  --multi
+  --delimiter '\t'
+  --preview 'flatpak info --{3} {1}'
+  --preview-label='alt-p: toggle description, alt-j/k: scroll, tab: multi-select'
+  --preview-label-pos='bottom'
+  --preview-window 'down:65%:wrap'
+  --bind 'alt-p:toggle-preview'
+  --bind 'alt-d:preview-half-page-down,alt-u:preview-half-page-up'
+  --bind 'alt-k:preview-up,alt-j:preview-down'
+  --color 'pointer:red,marker:red'
+)
+
+selection=$(flatpak list --app --columns=application,name,installation | fzf "${fzf_args[@]}")
+
+if [[ -n $selection ]]; then
+  system_ids=$(awk -F'\t' '$3 == "system" {print $1}' <<<"$selection")
+  user_ids=$(awk -F'\t' '$3 == "user" {print $1}' <<<"$selection")
+
+  if [[ -n $system_ids ]]; then
+    source omarchy-sudo-keepalive
+    echo "$system_ids" | tr '\n' ' ' | xargs sudo flatpak uninstall -y --noninteractive --system
+  fi
+  [[ -n $user_ids ]] && echo "$user_ids" | tr '\n' ' ' | xargs flatpak uninstall -y --noninteractive --user
+
+  # Drop runtimes nothing depends on anymore
+  sudo -n true 2>/dev/null && sudo flatpak uninstall -y --noninteractive --unused --system
+  flatpak uninstall -y --noninteractive --unused --user
+  omarchy-show-done
+fi
