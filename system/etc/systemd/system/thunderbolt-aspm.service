@@ -1,0 +1,10 @@
+[Unit]
+Description=Enable PCIe ASPM L1 on the Thunderbolt 2 link
+After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/thunderbolt-aspm
+
+[Install]
+WantedBy=multi-user.target suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target

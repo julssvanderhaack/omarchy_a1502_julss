@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# After resume, make sure the wifi comes back. The check runs as a detached
+# transient unit so it never delays waking up; logs: journalctl -u julss-wifi-resume-check
+
+unit=julss-wifi-resume-check
+
+# Stop a check still running from a previous resume (also before suspending).
+systemctl stop "$unit.service" >/dev/null 2>&1
+
+if [[ $1 == "post" ]]; then
+  systemd-run --no-block --collect --unit="$unit" /usr/local/bin/julss-wifi-resume-check
+fi

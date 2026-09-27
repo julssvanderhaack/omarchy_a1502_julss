@@ -1,0 +1,69 @@
+#!/bin/bash
+
+# On resume brcmfmac reloads the BCM43602 firmware and the first association
+# sometimes times out. NetworkManager usually recovers on its own retry; if it
+# hasn't after a grace period, bounce the radio, and as a last resort reload
+# the driver. Does nothing if wifi is switched off or no saved network is in range.
+
+set -u
+
+IFACE=wlp3s0
+GRACE=30
+
+connected() {
+  [[ $(nmcli -g GENERAL.STATE device show "$IFACE" 2>/dev/null) == 100* ]]
+}
+
+wait_connected() {
+  local i
+  for ((i = 0; i < GRACE; i++)); do
+    connected && return 0
+    sleep 1
+  done
+  return 1
+}
+
+known_network_in_range() {
+  local name ssid visible
+  visible=$(nmcli -g SSID device wifi list ifname "$IFACE" --rescan yes 2>/dev/null)
+  while IFS=: read -r name type; do
+    [[ $type == 802-11-wireless ]] || continue
+    ssid=$(nmcli -g 802-11-wireless.ssid connection show "$name" 2>/dev/null)
+    [[ -n $ssid ]] && grep -Fxq -- "$ssid" <<<"$visible" && return 0
+  done < <(nmcli -g NAME,TYPE connection show)
+  return 1
+}
+
+if wait_connected; then
+  echo "Wifi reconnected on its own"
+  exit 0
+fi
+
+if [[ $(nmcli radio wifi) != enabled ]]; then
+  echo "Wifi radio is off, nothing to do"
+  exit 0
+fi
+
+if ! known_network_in_range; then
+  echo "No saved network in range, nothing to do"
+  exit 0
+fi
+
+echo "Not connected after ${GRACE}s, restarting the wifi radio"
+nmcli radio wifi off
+sleep 2
+nmcli radio wifi on
+if wait_connected; then
+  echo "Wifi reconnected after restarting the radio"
+  exit 0
+fi
+
+echo "Still not connected, reloading brcmfmac"
+modprobe -r brcmfmac && modprobe brcmfmac
+if wait_connected; then
+  echo "Wifi reconnected after reloading the driver"
+  exit 0
+fi
+
+echo "Wifi still not connected"
+exit 1

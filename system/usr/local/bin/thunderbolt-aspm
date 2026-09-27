@@ -1,0 +1,7 @@
+#!/bin/bash
+# MacBookPro12,1: el kernel deja ASPM desactivado en el enlace del Thunderbolt 2
+# (Falcon Ridge), lo que impide al paquete bajar de PC3. Activa L1 en ambos lados
+# del enlace (primero aguas abajo). Ahorra ~1 W en reposo.
+for d in 07:00.0 06:00.0 05:00.0 00:1c.4; do
+  [ -e /sys/bus/pci/devices/0000:$d ] && setpci -s "$d" CAP_EXP+0x10.w=0x0002:0x0003
+done

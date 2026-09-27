@@ -41,6 +41,21 @@ for p in "$REPO_DIR"/plugins/*/; do
   backup_and_copy "$p" "$CONFIG_DIR/omarchy/plugins/$name"
 done
 
+# system files (MacBookPro12,1): need sudo, so ask first
+echo
+read -rp "¿Instalar también los ficheros de sistema de system/ (necesita sudo)? [s/N] " answer
+if [[ $answer == [sS] ]]; then
+  while IFS= read -r -d '' f; do
+    dest="/${f#"$REPO_DIR"/system/}"
+    sudo install -Dm"$(stat -c %a "$f")" "$f" "$dest"
+    echo "Instalado: $dest"
+  done < <(find "$REPO_DIR/system" -type f -print0)
+
+  # ASPM L1 on the Thunderbolt 2 link, at boot and after resume
+  sudo systemctl daemon-reload
+  sudo systemctl enable --now thunderbolt-aspm.service
+fi
+
 echo
 echo "Hecho. Ahora ejecuta: omarchy restart shell && hyprctl reload"
 echo "Revisa el README para reinstalar plugins/temas de terceros."
