@@ -20,7 +20,9 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.notifications/        # Historial de notificaciones + "Borrar todas"
 └── julss.places/                # Marcadores de Nautilus + expulsar unidades extraíbles
 system/                         # Ficheros de sistema (install.sh pregunta antes de instalarlos con sudo)
+├── etc/modprobe.d/mbp12-woofers.conf                 # Carga el patch de HDA que reactiva los woofers
 ├── etc/systemd/system/thunderbolt-aspm.service      # Aplica thunderbolt-aspm al arrancar y al despertar
+├── usr/lib/firmware/hda-mbp12-woofers.fw            # Patch HDA: restaura el pin 0x13 (woofers) del CS4208
 ├── usr/lib/systemd/system-sleep/julss-wifi-resume   # Hook al despertar de la suspensión
 ├── usr/local/bin/julss-wifi-resume-check            # Comprueba/recupera la wifi tras despertar
 └── usr/local/bin/thunderbolt-aspm                   # Activa ASPM L1 en el enlace del Thunderbolt 2
@@ -62,6 +64,22 @@ y, si aun así no conecta, recarga el driver. Lo instala `install.sh` (parte de
 ficheros de sistema).
 
 Registro: `journalctl -u julss-wifi-resume-check`.
+
+## Altavoces: woofers (CS4208)
+
+El kernel aplica al MacBookPro12,1 el fixup del MacBook Air (PCI SSID
+8086:7270), que desactiva el pin 0x13 del codec CS4208: solo suenan los
+tweeters y el sonido queda metálico
+([omarchy#12217](https://github.com/omacom/omarchy/issues/12217)).
+`hda-mbp12-woofers.fw` restaura el valor de BIOS (`0x13 0x90100112`) y
+`mbp12-woofers.conf` hace que `snd_hda_intel` lo cargue. Lo instala
+`install.sh`; se aplica tras reiniciar. Comprobar:
+
+```bash
+journalctl -k -b | grep line_outs   # debe listar 0x12/0x13
+```
+
+Aparece además un control "Bass Speaker" en el mezclador.
 
 ## Ahorro de energía: ASPM en el Thunderbolt 2
 

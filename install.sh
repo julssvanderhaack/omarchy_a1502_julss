@@ -54,6 +54,7 @@ if [[ $answer == [sS] ]]; then
   # ASPM L1 on the Thunderbolt 2 link, at boot and after resume
   sudo systemctl daemon-reload
   sudo systemctl enable --now thunderbolt-aspm.service
+  echo "Los woofers (patch HDA) se activan tras reiniciar."
 fi
 
 echo
