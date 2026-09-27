@@ -13,6 +13,7 @@ omarchy/
 bin/                            # ~/.local/bin/ — scripts usados por el menú
 ├── julss-flatpak-install       # Instalar → Flatpak (fzf sobre Flathub)
 └── julss-flatpak-remove        # Desinstalar → Flatpak
+chromium/chromium-flags.conf    # ~/.config/chromium-flags.conf — Wayland + decodificación de vídeo por hardware
 bash/bashrc                     # ~/.bashrc — carga ble.sh (autosugerencias tipo fish)
 plugins/                        # Plugins propios de la barra (~/.config/omarchy/plugins/)
 ├── julss.clock/                # Reloj con formato/verticalFormat personalizados
@@ -64,6 +65,22 @@ y, si aun así no conecta, recarga el driver. Lo instala `install.sh` (parte de
 ficheros de sistema).
 
 Registro: `journalctl -u julss-wifi-resume-check`.
+
+## Vídeo en Chromium (VA-API + H.264)
+
+La GPU (Iris 6100, Broadwell) solo decodifica por hardware H.264 y VP8. YouTube
+sirve VP9/AV1, que acaban en la CPU: más consumo, calor y tirones a 1080p60.
+
+- `chromium-flags.conf` añade `AcceleratedVideoDecodeLinuxGL` y
+  `AcceleratedVideoDecodeLinuxZeroCopyGL` a la (única) línea `--enable-features=`.
+  Chromium solo respeta el último `--enable-features`, así que no hay que
+  añadir otra línea.
+- Instalar la extensión
+  [enhanced-h264ify](https://chrome.google.com/webstore/detail/enhanced-h264ify/omkfmpieigblcllmkgbflkikinpkodlk),
+  que obliga a YouTube a servir H.264 (máx. 1080p).
+
+Comprobar: en YouTube, *Estadísticas para nerds* → Codecs debe decir `avc1`;
+`chrome://gpu` → Video Decode: *Hardware accelerated*.
 
 ## Altavoces: woofers (CS4208)
 

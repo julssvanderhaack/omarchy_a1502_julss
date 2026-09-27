@@ -32,6 +32,9 @@ for f in "$REPO_DIR"/bin/*; do
   backup_and_copy "$f" "$HOME/.local/bin/$(basename "$f")"
 done
 
+# Chromium flags (VA-API video decode)
+backup_and_copy "$REPO_DIR/chromium/chromium-flags.conf" "$CONFIG_DIR/chromium-flags.conf"
+
 # ~/.bashrc (carga ble.sh para autosugerencias si está instalado)
 backup_and_copy "$REPO_DIR/bash/bashrc" "$HOME/.bashrc"
 
