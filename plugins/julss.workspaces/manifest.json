@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.workspaces",
+  "name": "Workspaces",
+  "version": "1.1.0",
+  "author": "julss",
+  "description": "Escritorios numerados sin huecos; el activo se ve como cuadrado relleno con el número",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Workspaces.qml"
+  },
+  "barWidget": {
+    "displayName": "My Workspaces",
+    "description": "Workspace number indicators",
+    "category": "Compositor",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.workspaces"
+  }
+}
