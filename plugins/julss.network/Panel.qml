@@ -828,7 +828,9 @@ Panel {
   // Pulls everything we want about the active route's interface in one shot.
   Process {
     id: detailsProc
-    command: ["omarchy-network-status", "--verbose"]
+    // Same script as stock, but pinging 8.8.8.8 instead of 1.1.1.1 (the
+    // latter doesn't answer ICMP on this network).
+    command: ["bash", "-c", "sed 's/^internet_probe=1\\.1\\.1\\.1$/internet_probe=8.8.8.8/' \"$(command -v omarchy-network-status)\" | bash -s -- --verbose"]
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: root.updateDetails(text)
