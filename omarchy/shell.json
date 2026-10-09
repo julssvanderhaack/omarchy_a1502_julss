@@ -4,10 +4,17 @@
     "layout": {
       "center": [
         {
-          "id": "omarchy.indicators"
+          "id": "omarchy.keyboard-layout"
         },
         {
-          "id": "omarchy.keyboard-layout"
+          "id": "omarchy.indicators",
+          "items": [
+            "Dictation",
+            "ScreenRecording",
+            "Reminder",
+            "NightLight",
+            "StayAwake"
+          ]
         },
         {
           "id": "omarchy.weather"
@@ -38,9 +45,6 @@
           "id": "omarchy.dropbox"
         },
         {
-          "id": "omarchy.agents"
-        },
-        {
           "id": "omarchy.bluetooth"
         },
         {
@@ -51,6 +55,9 @@
         },
         {
           "id": "omarchy.monitor"
+        },
+        {
+          "id": "omarchy.agents"
         },
         {
           "id": "omarchy.power",
@@ -68,7 +75,7 @@
       ]
     },
     "position": "top",
-    "transparent": false
+    "transparent": true
   },
   "idle": {
     "lock": 300,
