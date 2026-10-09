@@ -20,9 +20,6 @@
           "id": "julss.weather"
         },
         {
-          "id": "julss.lan"
-        },
-        {
           "id": "julss.system-update"
         }
       ],
@@ -58,6 +55,9 @@
         },
         {
           "id": "julss.monitor"
+        },
+        {
+          "id": "julss.lan"
         },
         {
           "id": "julss.agents"
