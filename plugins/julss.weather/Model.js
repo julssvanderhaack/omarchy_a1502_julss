@@ -147,7 +147,8 @@ function openMeteoForecastDays(dailyForecastReport, todayString) {
       mintempC: roundedTemp(minC),
       maxtempF: roundedTemp(celsiusToFahrenheit(maxC)),
       mintempF: roundedTemp(celsiusToFahrenheit(minC)),
-      openMeteoWeatherCode: daily.weather_code ? daily.weather_code[i] : null
+      openMeteoWeatherCode: daily.weather_code ? daily.weather_code[i] : null,
+      rainChance: daily.precipitation_probability_max ? daily.precipitation_probability_max[i] : null
     })
   }
   return result
@@ -204,6 +205,20 @@ function wttrNextForecastDays(report, todayString) {
 function buildForecastDays(report, dailyForecastReport, todayString) {
   var days = openMeteoForecastDays(dailyForecastReport, todayString)
   return days.length > 0 ? days : wttrNextForecastDays(report, todayString)
+}
+
+// julss: probabilidad máxima de lluvia del día (0-100), o -1 si no se sabe.
+// Open-Meteo la da directamente; wttr.in, por horas (chanceofrain).
+function rainChanceForDay(day) {
+  if (!day) return -1
+  if (day.rainChance !== undefined && day.rainChance !== null) return Math.round(Number(day.rainChance))
+  var hourly = day.hourly || []
+  var best = -1
+  for (var i = 0; i < hourly.length; ++i) {
+    var c = parseInt(String(hourly[i].chanceofrain || ""), 10)
+    if (!isNaN(c) && c > best) best = c
+  }
+  return best
 }
 
 function bareTempForDay(day, kind, useImperial) {
@@ -288,6 +303,7 @@ if (typeof module !== "undefined") {
     wttrNextForecastDays: wttrNextForecastDays,
     buildForecastDays: buildForecastDays,
     bareTempForDay: bareTempForDay,
+    rainChanceForDay: rainChanceForDay,
     dayIcon: dayIcon,
     iconForOpenMeteoCode: iconForOpenMeteoCode,
     iconForCode: iconForCode

@@ -239,7 +239,7 @@ Panel {
     var url = "https://api.open-meteo.com/v1/forecast"
       + "?latitude=" + encodeURIComponent(String(lat))
       + "&longitude=" + encodeURIComponent(String(lon))
-      + "&daily=weather_code,temperature_2m_max,temperature_2m_min"
+      + "&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max"
       + "&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,weather_code,is_day"
       + "&forecast_days=4"
       + "&timezone=auto"
@@ -983,6 +983,17 @@ Panel {
                     font.family: root.bar.fontFamily
                     font.pixelSize: Style.font.body
                   }
+                }
+
+                // julss: probabilidad de lluvia del día.
+                Text {
+                  readonly property int chance: Model.rainChanceForDay(modelData)
+                  visible: chance >= 0
+                  textFormat: Text.PlainText
+                  text: "󰖌 " + chance + "%"
+                  color: chance >= 50 ? Color.accent : Qt.darker(root.bar.foreground, 1.4)
+                  font.family: root.bar.fontFamily
+                  font.pixelSize: Style.font.caption
                 }
               }
             }
