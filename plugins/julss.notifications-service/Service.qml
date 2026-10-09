@@ -150,8 +150,10 @@ Item {
   //     Trusted because it's almost always omarchy or system shell scripts —
   //     chat apps set app_name to their brand (Discord/Slack/Vesktop), which
   //     falls outside this rule.
+  // julss: No molestar estricto — nada se salta el modo (ni omarchy-action
+  // como "Process crashed", ni notify-send crítico).
   function shouldBypassDnd(notification) {
-    return NotificationLogic.shouldBypassDnd(notification, NotificationUrgency.Critical)
+    return false
   }
 
   function snapshotOf(notification) {
@@ -197,7 +199,10 @@ Item {
       // The toast never shows, so the only record a silenced notification
       // can leave is a history entry. Write it straight into history —
       // "what did I miss while silenced" is exactly what history is for.
-      if (!isEphemeral(notification)) {
+      // julss: con DND estricto, los avisos de Omarchy (omarchy-action) que
+      // antes se mostraban igualmente se guardan en el historial en vez de
+      // perderse; solo se descartan los marcados como transient.
+      if (!isEphemeral(notification) || String(notification.appName || "") === "omarchy-action") {
         writeSilenced(notification, snapshot)
         return
       }
