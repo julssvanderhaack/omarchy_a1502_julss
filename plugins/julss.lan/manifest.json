@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.lan",
+  "name": "Red local",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Escanea la red local y muestra los dispositivos conectados con su nombre, IP y fabricante",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Red local",
+    "description": "Dispositivos conectados a la red local",
+    "category": "Network",
+    "allowMultiple": false
+  }
+}

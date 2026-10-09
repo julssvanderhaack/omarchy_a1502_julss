@@ -32,6 +32,7 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.wifiqr/               # QR de la Wi-Fi, en castellano
 ├── julss.audio/                # Panel Sonido en castellano + sección APLICACIONES siempre visible (volumen y silencio por app)
 ├── julss.clock/                # Reloj con segundos + calendario, en castellano (locale es_ES)
+├── julss.lan/                  # Red local: escanea la LAN (ping + vecinos + mDNS/DNS/NetBIOS/UPnP) y lista dispositivos con nombre, IP y fabricante
 ├── julss.menu/                 # Menú/launcher propio
 ├── julss.notifications/        # Historial + "Borrar todas", no molestar y selector de tiempo en pantalla (3/5/8/15/30 s/∞)
 ├── julss.notifications-service/ # Clon del servicio omarchy.notifications que lee ~/.local/state/omarchy/notifications-duration

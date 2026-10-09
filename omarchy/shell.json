@@ -20,6 +20,9 @@
           "id": "julss.weather"
         },
         {
+          "id": "julss.lan"
+        },
+        {
           "id": "julss.system-update"
         }
       ],
