@@ -20,8 +20,8 @@ BarWidget {
     ? setting("verticalFormat", "HH\n—\nmm")
     : setting("format", "dddd HH:mm")
   readonly property string configuredAltFormat: vertical
-    ? setting("verticalFormatAlt", "dd\nMMM\n'W'ww\n''yy")
-    : setting("formatAlt", "d MMMM 'W'ww yyyy")
+    ? setting("verticalFormatAlt", "dd\nMMM\n'S'ww\n''yy")
+    : setting("formatAlt", "d 'de' MMMM 'S'ww yyyy")
 
   readonly property var formatRing: Model.clockFormatRing(configuredFormat, configuredAltFormat, Model.clockFormats(vertical))
 
@@ -53,7 +53,9 @@ BarWidget {
   }
 
   function formatted(date) {
-    return Qt.formatDateTime(date, activeFormat.replace(/ww/g, Model.isoWeekLiteral(date.getFullYear(), date.getMonth(), date.getDate())))
+    // Castellano: días/meses de es_ES, con la primera letra en mayúscula.
+    var text = Qt.locale("es_ES").toString(date, activeFormat.replace(/ww/g, Model.isoWeekLiteral(date.getFullYear(), date.getMonth(), date.getDate())))
+    return text.charAt(0).toUpperCase() + text.slice(1)
   }
 
   // ---- Calendar popup. Shape contract for shell.summon/hide/toggle

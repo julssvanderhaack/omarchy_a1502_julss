@@ -25,7 +25,7 @@ var CLOCK_FORMATS = [
   "h:mm:ss AP",
   "ddd d MMM HH:mm:ss",
   "ddd d MMM h:mm:ss AP",
-  "d MMMM 'W'ww yyyy",
+  "d 'de' MMMM 'S'ww yyyy",
   "yyyy-MM-dd HH:mm:ss"
 ]
 
@@ -35,7 +35,7 @@ var CLOCK_FORMATS = [
 var VERTICAL_CLOCK_FORMATS = [
   "HH\n—\nmm\n—\nss",
   "h\n—\nmm\n—\nss\nAP",
-  "dd\nMMM\n'W'ww\n''yy",
+  "dd\nMMM\n'S'ww\n''yy",
   "HH\nmm\nss"
 ]
 

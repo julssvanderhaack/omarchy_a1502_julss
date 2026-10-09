@@ -16,7 +16,7 @@ bin/                            # ~/.local/bin/ — scripts usados por el menú
 chromium/chromium-flags.conf    # ~/.config/chromium-flags.conf — Wayland + decodificación de vídeo por hardware
 bash/bashrc                     # ~/.bashrc — carga ble.sh (autosugerencias tipo fish)
 plugins/                        # Plugins propios de la barra (~/.config/omarchy/plugins/)
-├── julss.clock/                # Reloj con formato/verticalFormat personalizados
+├── julss.clock/                # Reloj con segundos + calendario, en castellano (locale es_ES)
 ├── julss.menu/                 # Menú/launcher propio
 ├── julss.notifications/        # Historial + "Borrar todas", no molestar y selector de tiempo en pantalla (3/5/8/15/30 s/∞)
 ├── julss.notifications-service/ # Clon del servicio omarchy.notifications que lee ~/.local/state/omarchy/notifications-duration

@@ -66,7 +66,7 @@
         {
           "id": "julss.clock",
           "format": "ddd d MMM HH:mm:ss",
-          "formatAlt": "d MMMM 'W'ww yyyy",
+          "formatAlt": "d 'de' MMMM 'S'ww yyyy",
           "verticalFormat": "HH\n—\nmm"
         },
         {
