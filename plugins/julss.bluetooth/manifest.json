@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.bluetooth",
+  "name": "Bluetooth",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Bluetooth device list with connect/disconnect (en castellano)",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Bluetooth",
+    "description": "Bluetooth device list with connect/disconnect",
+    "category": "Network",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.bluetooth"
+  }
+}

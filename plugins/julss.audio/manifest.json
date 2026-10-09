@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "julss.audio",
-  "name": "My Audio",
+  "name": "Sonido",
   "version": "1.0.0",
   "author": "julss",
   "description": "Volumen, salida y mezclador por aplicación, en castellano",
@@ -12,7 +12,7 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "My Audio",
+    "displayName": "Sonido",
     "description": "Volumen, salida y mezclador por aplicación, en castellano",
     "category": "Audio",
     "allowMultiple": false

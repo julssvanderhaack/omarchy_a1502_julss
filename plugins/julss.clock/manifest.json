@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "julss.clock",
-  "name": "My Clock",
+  "name": "Reloj",
   "version": "1.0.0",
   "author": "julss",
   "description": "Reloj con segundos y calendario, en castellano",
@@ -12,7 +12,7 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "My Clock",
+    "displayName": "Reloj",
     "description": "Reloj con segundos y calendario, en castellano",
     "category": "Time",
     "allowMultiple": false

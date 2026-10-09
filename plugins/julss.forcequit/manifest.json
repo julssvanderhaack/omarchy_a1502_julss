@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.forcequit",
+  "name": "Forzar cierre",
+  "version": "1.0.0",
+  "author": "julss (basado en Force Quit de Gregor Oppitz, MIT)",
+  "license": "MIT",
+  "description": "Copia en castellano de rogergdot.forcequit: lista las ventanas abiertas por proceso y permite cerrarlas o forzar su cierre",
+  "keywords": [
+    "force quit",
+    "kill",
+    "process",
+    "window",
+    "task manager",
+    "bar-widget"
+  ],
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Forzar cierre",
+    "description": "Elige una aplicación de la lista de ventanas abiertas y ciérrala",
+    "category": "Window management",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "requireConfirm": true,
+      "confirmSeconds": 5,
+      "visibleRows": 8
+    },
+    "schema": [
+      {
+        "key": "requireConfirm",
+        "type": "boolean",
+        "label": "Preguntar antes de forzar el cierre",
+        "defaultValue": true
+      },
+      {
+        "key": "confirmSeconds",
+        "type": "integer",
+        "label": "Segundos que la confirmación sigue activa",
+        "min": 2,
+        "max": 30,
+        "step": 1,
+        "defaultValue": 5
+      },
+      {
+        "key": "visibleRows",
+        "type": "integer",
+        "label": "Filas visibles antes de desplazar la lista",
+        "min": 3,
+        "max": 20,
+        "step": 1,
+        "defaultValue": 8
+      }
+    ]
+  }
+}

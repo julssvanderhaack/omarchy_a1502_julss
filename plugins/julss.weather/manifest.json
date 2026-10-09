@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.weather",
+  "name": "Tiempo",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Weather pill with detail popup (en castellano)",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Tiempo",
+    "description": "Weather pill with detail popup",
+    "category": "Info",
+    "allowMultiple": false,
+    "settingsForm": "weatherSettings"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.weather"
+  }
+}

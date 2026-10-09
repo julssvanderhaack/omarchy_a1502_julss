@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.system-update",
+  "name": "Actualización de Omarchy",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Indicates available Omarchy updates (en castellano)",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "SystemUpdate.qml"
+  },
+  "barWidget": {
+    "displayName": "Actualización de Omarchy",
+    "description": "Indicates available Omarchy updates",
+    "category": "System",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.system-update"
+  }
+}

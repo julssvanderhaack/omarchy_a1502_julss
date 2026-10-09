@@ -16,6 +16,20 @@ bin/                            # ~/.local/bin/ — scripts usados por el menú
 chromium/chromium-flags.conf    # ~/.config/chromium-flags.conf — Wayland + decodificación de vídeo por hardware
 bash/bashrc                     # ~/.bashrc — carga ble.sh (autosugerencias tipo fish)
 plugins/                        # Plugins propios de la barra (~/.config/omarchy/plugins/)
+├── julss.agents/               # Panel de uso de agentes de IA, en castellano
+├── julss.bluetooth/            # Panel Bluetooth, en castellano
+├── julss.clipboard/            # Historial del portapapeles, en castellano
+├── julss.dropbox/              # Panel Dropbox, en castellano
+├── julss.emojis/               # Selector de emojis, en castellano
+├── julss.forcequit/            # Copia en castellano de rogergdot.forcequit (MIT, Gregor Oppitz)
+├── julss.indicators/           # Indicadores (dictado, grabación, luz nocturna…), en castellano
+├── julss.keyboard-layout/      # Distribución de teclado (clon, sin textos propios)
+├── julss.reminders/            # Recordatorios, en castellano
+├── julss.speedtest/            # Test de velocidad, en castellano
+├── julss.system-update/        # Aviso de actualizaciones, en castellano
+├── julss.tray/                 # Bandeja del sistema, en castellano
+├── julss.weather/              # Tiempo (días y búsqueda de ciudades en castellano)
+├── julss.wifiqr/               # QR de la Wi-Fi, en castellano
 ├── julss.audio/                # Panel Sonido en castellano + sección APLICACIONES siempre visible (volumen y silencio por app)
 ├── julss.clock/                # Reloj con segundos + calendario, en castellano (locale es_ES)
 ├── julss.menu/                 # Menú/launcher propio

@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "julss.power",
-  "name": "My Power",
+  "name": "Batería",
   "version": "1.0.0",
   "author": "Omarchy",
   "description": "Batería y perfiles de energía en castellano, con salud de la batería",
@@ -12,7 +12,7 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "My Power",
+    "displayName": "Batería",
     "description": "Batería y perfiles de energía en castellano, con salud de la batería",
     "category": "System",
     "allowMultiple": false

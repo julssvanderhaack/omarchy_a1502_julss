@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "julss.notifications-service",
-  "name": "My Notifications Service",
+  "name": "Servicio de notificaciones",
   "version": "1.0.0",
   "author": "julss",
   "description": "Servicio de notificaciones de Omarchy con duración de los avisos configurable",

@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.keyboard-layout",
+  "name": "Distribución de teclado",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Current xkb layout, click cycles (en castellano)",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "KeyboardLayout.qml"
+  },
+  "barWidget": {
+    "displayName": "Distribución de teclado",
+    "description": "Current xkb layout, click cycles",
+    "category": "Compositor",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.keyboard-layout"
+  }
+}

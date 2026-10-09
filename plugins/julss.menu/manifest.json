@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "julss.menu",
-  "name": "My Omarchy menu",
+  "name": "Menú de Omarchy",
   "version": "1.0.0",
   "author": "Omarchy",
   "description": "Quickshell-powered Omarchy command menu",
@@ -15,7 +15,7 @@
     "barWidget": "BarWidget.qml"
   },
   "barWidget": {
-    "displayName": "My Omarchy menu",
+    "displayName": "Menú de Omarchy",
     "description": "Launches the Omarchy menu",
     "category": "Compositor",
     "allowMultiple": false

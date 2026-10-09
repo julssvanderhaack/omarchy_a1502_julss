@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "julss.notifications",
-  "name": "Notifications",
+  "name": "Notificaciones",
   "version": "1.2.0",
   "author": "julss",
   "description": "Gestor de notificaciones: historial guardado por Omarchy, borrar todas, modo no molestar y tiempo en pantalla configurable",

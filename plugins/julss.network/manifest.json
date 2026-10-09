@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "julss.network",
-  "name": "My Network",
+  "name": "Red",
   "version": "1.0.0",
   "author": "Omarchy",
   "description": "Lista Wi-Fi y estado de la conexión, en castellano, con IP pública",
@@ -12,7 +12,7 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "My Network",
+    "displayName": "Red",
     "description": "Lista Wi-Fi y estado de la conexión, en castellano, con IP pública",
     "category": "Network",
     "allowMultiple": false

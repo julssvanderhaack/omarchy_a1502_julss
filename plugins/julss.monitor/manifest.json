@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "julss.monitor",
-  "name": "My Display",
+  "name": "Pantalla",
   "version": "1.0.0",
   "author": "Omarchy",
   "description": "Brillo, escala y acceso a Monitor Layout, en castellano",
@@ -12,7 +12,7 @@
     "barWidget": "Panel.qml"
   },
   "barWidget": {
-    "displayName": "My Display",
+    "displayName": "Pantalla",
     "description": "Brillo, escala y acceso a Monitor Layout, en castellano",
     "category": "System",
     "allowMultiple": false

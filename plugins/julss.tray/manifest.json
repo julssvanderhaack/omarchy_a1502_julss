@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.tray",
+  "name": "Bandeja del sistema",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Status notifier items (en castellano)",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Tray.qml"
+  },
+  "barWidget": {
+    "displayName": "Bandeja del sistema",
+    "description": "Status notifier items",
+    "category": "Status",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.tray"
+  }
+}

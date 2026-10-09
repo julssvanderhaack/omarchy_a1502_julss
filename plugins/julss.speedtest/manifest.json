@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.speedtest",
+  "name": "Test de velocidad",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Internet speed test with download and upload dials",
+  "kinds": [
+    "panel"
+  ],
+  "entryPoints": {
+    "panel": "Panel.qml"
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.speedtest"
+  }
+}

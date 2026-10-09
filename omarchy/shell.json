@@ -4,10 +4,10 @@
     "layout": {
       "center": [
         {
-          "id": "omarchy.keyboard-layout"
+          "id": "julss.keyboard-layout"
         },
         {
-          "id": "omarchy.indicators",
+          "id": "julss.indicators",
           "items": [
             "Dictation",
             "ScreenRecording",
@@ -17,10 +17,10 @@
           ]
         },
         {
-          "id": "omarchy.weather"
+          "id": "julss.weather"
         },
         {
-          "id": "omarchy.system-update"
+          "id": "julss.system-update"
         }
       ],
       "left": [
@@ -36,16 +36,16 @@
       ],
       "right": [
         {
-          "id": "omarchy.tray"
+          "id": "julss.tray"
         },
         {
-          "id": "rogergdot.forcequit"
+          "id": "julss.forcequit"
         },
         {
-          "id": "omarchy.dropbox"
+          "id": "julss.dropbox"
         },
         {
-          "id": "omarchy.bluetooth"
+          "id": "julss.bluetooth"
         },
         {
           "id": "julss.network"
@@ -57,7 +57,7 @@
           "id": "julss.monitor"
         },
         {
-          "id": "omarchy.agents"
+          "id": "julss.agents"
         },
         {
           "id": "julss.power",
@@ -90,13 +90,38 @@
     },
     {
       "id": "julss.notifications-service"
+    },
+    {
+      "id": "julss.speedtest"
+    },
+    {
+      "id": "julss.wifiqr"
+    },
+    {
+      "id": "julss.emojis"
+    },
+    {
+      "id": "julss.clipboard"
+    },
+    {
+      "id": "julss.reminders"
     }
   ],
   "version": 1,
   "disabledPlugins": [
-    "omarchy.notifications"
+    "omarchy.notifications",
+    "omarchy.speedtest",
+    "omarchy.wifiqr",
+    "omarchy.emojis",
+    "omarchy.clipboard",
+    "omarchy.reminders"
   ],
   "cloneSourceRestores": [
-    "julss.notifications-service"
+    "julss.notifications-service",
+    "julss.speedtest",
+    "julss.wifiqr",
+    "julss.emojis",
+    "julss.clipboard",
+    "julss.reminders"
   ]
 }
