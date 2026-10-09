@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.power",
+  "name": "My Power",
+  "version": "1.0.0",
+  "author": "Omarchy",
+  "description": "Batería y perfiles de energía en castellano, con salud de la batería",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "My Power",
+    "description": "Batería y perfiles de energía en castellano, con salud de la batería",
+    "category": "System",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.power"
+  }
+}

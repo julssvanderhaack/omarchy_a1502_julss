@@ -1,0 +1,15 @@
+#!/bin/bash
+# Salud de la batería: capacidad máxima actual (energy-full) frente a la de
+# diseño (energy-full-design), tal como las da UPower. Sin tope al 100 %.
+battery=$(upower -e 2>/dev/null | grep BAT | head -n 1)
+[[ -z $battery ]] && exit 0
+upower -i "$battery" | LC_ALL=C awk '
+  /energy-full:/        { gsub(",", ".", $2); full = $2 }
+  /energy-full-design:/ { gsub(",", ".", $2); design = $2 }
+  END {
+    if (full > 0 && design > 0) {
+      printf "health\t%d%%\n", int(full / design * 100 + 0.5)
+      printf "full\t%.1f Wh\n", full
+      printf "design\t%.1f Wh\n", design
+    }
+  }' | sed 's/\([0-9]\)\.\([0-9] Wh\)/\1,\2/'
