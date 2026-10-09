@@ -7,10 +7,10 @@
 // that accessor only proxies a small allowlisted surface (doNotDisturb) to
 // third-party plugins and does not expose historyDir/clearHistory directly.
 //
-// Popup timeout: the service already expires low/normal toasts after 5-8 s,
-// but critical-urgency ones (duration 0) stay until clicked. This widget
-// sweeps the service's per-popup files and dismisses any toast older than
-// popupTimeoutMs through the same IPC, which moves it into history.
+// Popup duration: chosen in the panel and written (in seconds, 0 = until
+// closed) to ~/.local/state/omarchy/notifications-duration. The cloned
+// service julss.notifications-service watches that file and uses it for every
+// toast; without the file it keeps Omarchy's stock 5/8 s.
 //
 // Do Not Disturb is the service's own: while on, toasts are not shown and go
 // straight to history. Read/set through IPC (isDnd/setDnd) because the
@@ -32,7 +32,8 @@ BarWidget {
   readonly property string home: Quickshell.env("HOME") || ""
   readonly property string popupDir: root.home + "/.local/state/omarchy/notifications/"
   readonly property string historyDir: root.popupDir + "history/"
-  readonly property int popupTimeoutMs: 30000
+  readonly property string durationPath: root.home + "/.local/state/omarchy/notifications-duration"
+  property int durationSeconds: -1
 
   property bool dnd: false
 
@@ -54,6 +55,7 @@ BarWidget {
     target.hostWidget = root
     target.entries = root.entries
     target.dnd = root.dnd
+    target.durationSeconds = root.durationSeconds
   }
 
   function refresh() {
@@ -75,20 +77,14 @@ BarWidget {
     dndProc.running = true
   }
 
-  function sweepPopups() {
-    if (popupProc.running || dismissProc.running) return
-    popupProc.command = ["bash", "-c",
-      "awk 1 \"$1\"/*.json 2>/dev/null || true", "--", root.popupDir]
-    popupProc.running = true
+  function setDuration(seconds) {
+    root.durationSeconds = seconds
+    durationFile.setText(String(seconds) + "\n")
   }
 
-  function dismissStale(raw) {
-    var summaries = HistoryLogic.expiredPopupSummaries(
-      HistoryLogic.parseHistoryFile(raw), Date.now(), root.popupTimeoutMs)
-    if (summaries.length === 0) return
-    dismissProc.command = ["bash", "-c",
-      "for s in \"$@\"; do omarchy-shell -q notifications dismiss \"$s\"; done", "--"].concat(summaries)
-    dismissProc.running = true
+  function parseDuration(raw) {
+    var n = parseInt(String(raw || "").trim(), 10)
+    root.durationSeconds = isFinite(n) && n >= 0 ? n : -1
   }
 
   function clearAll() {
@@ -107,6 +103,18 @@ BarWidget {
   onSettingsChanged: injectPanel()
   onEntriesChanged: injectPanel()
   onDndChanged: injectPanel()
+  onDurationSecondsChanged: injectPanel()
+
+  FileView {
+    id: durationFile
+    path: root.durationPath
+    watchChanges: true
+    atomicWrites: true
+    printErrors: false
+    onLoaded: root.parseDuration(text())
+    onLoadFailed: root.durationSeconds = -1
+    onFileChanged: reload()
+  }
 
   Component.onCompleted: {
     refresh()
@@ -133,18 +141,7 @@ BarWidget {
     interval: 2000
     running: true
     repeat: true
-    onTriggered: {
-      root.sweepPopups()
-      root.readDnd()
-    }
-  }
-
-  Process {
-    id: popupProc
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: root.dismissStale(text)
-    }
+    onTriggered: root.readDnd()
   }
 
   Process {
@@ -162,11 +159,6 @@ BarWidget {
   Process {
     id: setDndProc
     onExited: root.readDnd()
-  }
-
-  Process {
-    id: dismissProc
-    onExited: root.refresh()
   }
 
   Process {

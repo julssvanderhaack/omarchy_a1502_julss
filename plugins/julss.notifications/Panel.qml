@@ -15,6 +15,9 @@ Panel {
   property var hostWidget: null
   property var entries: []
   property bool dnd: false
+  property int durationSeconds: -1
+  // Segundos que un aviso se queda en pantalla; 0 = hasta cerrarlo.
+  readonly property var durationOptions: [3, 5, 8, 15, 30, 0]
 
   // Ticks while the panel is open so "hace X min" stays roughly accurate
   // without re-reading the history files just to update a clock.
@@ -27,6 +30,10 @@ Panel {
 
   function toggleDnd() {
     if (root.hostWidget) root.hostWidget.setDnd(!root.dnd)
+  }
+
+  function setDuration(seconds) {
+    if (root.hostWidget) root.hostWidget.setDuration(seconds)
   }
 
   function clearAll() {
@@ -116,6 +123,43 @@ Panel {
             fontSize: Style.font.caption
             iconSize: Style.font.caption
             onClicked: root.toggleDnd()
+          }
+        }
+
+        Text {
+          textFormat: Text.PlainText
+          width: parent.width
+          text: root.durationSeconds < 0
+            ? "Tiempo en pantalla: por defecto de Omarchy (5–8 s)"
+            : (root.durationSeconds === 0 ? "Tiempo en pantalla: hasta cerrarlo" : "Tiempo en pantalla: " + root.durationSeconds + " s")
+          color: Qt.darker(root.barForeground, 1.4)
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.caption
+          elide: Text.ElideRight
+        }
+
+        Row {
+          id: durationRow
+          width: parent.width
+          spacing: Style.space(6)
+          readonly property real cellWidth: (width - spacing * (root.durationOptions.length - 1)) / root.durationOptions.length
+
+          Repeater {
+            model: root.durationOptions
+
+            Button {
+              required property var modelData
+              width: durationRow.cellWidth
+              text: modelData === 0 ? "∞" : modelData + " s"
+              tooltipText: modelData === 0 ? "Hasta cerrarlo" : "Desaparece a los " + modelData + " s"
+              bordered: true
+              active: root.durationSeconds === modelData
+              foreground: root.barForeground
+              fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+              fontSize: Style.font.caption
+              horizontalPadding: Style.spacing.sm
+              onClicked: root.setDuration(modelData)
+            }
           }
         }
 

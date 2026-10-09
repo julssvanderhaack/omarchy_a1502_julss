@@ -87,7 +87,16 @@
     },
     {
       "id": "vbrosseau.alttab"
+    },
+    {
+      "id": "julss.notifications-service"
     }
   ],
-  "version": 1
+  "version": 1,
+  "disabledPlugins": [
+    "omarchy.notifications"
+  ],
+  "cloneSourceRestores": [
+    "julss.notifications-service"
+  ]
 }
