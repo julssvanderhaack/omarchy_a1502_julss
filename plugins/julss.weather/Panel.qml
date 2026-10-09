@@ -494,7 +494,8 @@ Panel {
     open: root.opened
     centerOnBar: true
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(480))
+    // julss: ancho según contenido, las etiquetas en castellano son más largas.
+    contentWidth: panel.fittedContentWidth(Math.max(Style.space(480), heroLeft.implicitWidth + weatherStats.implicitWidth + Style.space(16 + 20 + 64)))
     contentHeight: panel.fittedContentHeight(weatherColumn.implicitHeight)
 
     PanelKeyCatcher {
