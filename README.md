@@ -19,6 +19,7 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.clock/                # Reloj con formato/verticalFormat personalizados
 ├── julss.menu/                 # Menú/launcher propio
 ├── julss.notifications/        # Historial de notificaciones + "Borrar todas", popups fuera a los 30 s, modo no molestar
+├── julss.monitor/              # Panel Pantalla en castellano + botón que abre Monitor Layout (flotante y centrado)
 ├── julss.network/              # Panel Wi-Fi/red en castellano + IP pública (vía api.ipify.org)
 ├── julss.places/               # Marcadores de Nautilus + expulsar unidades extraíbles
 └── julss.workspaces/           # Escritorios sin huecos en la numeración; el activo como cuadrado relleno con el número

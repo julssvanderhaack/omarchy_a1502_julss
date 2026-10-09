@@ -54,7 +54,7 @@
           "id": "omarchy.audio"
         },
         {
-          "id": "omarchy.monitor"
+          "id": "julss.monitor"
         },
         {
           "id": "omarchy.agents"
@@ -64,9 +64,9 @@
           "showPercentage": true
         },
         {
-          "format": "h:mm:ss AP",
-          "formatAlt": "d MMMM 'W'ww yyyy",
           "id": "julss.clock",
+          "format": "ddd d MMM HH:mm:ss",
+          "formatAlt": "d MMMM 'W'ww yyyy",
           "verticalFormat": "HH\n—\nmm"
         },
         {

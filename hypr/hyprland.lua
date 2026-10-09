@@ -27,3 +27,8 @@ require("default.hypr.toggles")
 
 -- Add any other personal Hyprland configuration below.
 -- o.window("qemu", { workspace = "5" })
+
+-- Monitor Layout (lanzado desde el panel Display): flotante y centrado, como el About.
+o.window("org.omarchy.MonitorLayout", { float = true })
+o.window("org.omarchy.MonitorLayout", { center = true })
+o.window("org.omarchy.MonitorLayout", { size = { 900, 620 } })

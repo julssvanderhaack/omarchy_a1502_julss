@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.monitor",
+  "name": "My Display",
+  "version": "1.0.0",
+  "author": "Omarchy",
+  "description": "Brillo, escala y acceso a Monitor Layout, en castellano",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "My Display",
+    "description": "Brillo, escala y acceso a Monitor Layout, en castellano",
+    "category": "System",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.monitor"
+  }
+}
