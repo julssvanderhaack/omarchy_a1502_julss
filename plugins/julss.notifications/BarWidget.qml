@@ -6,6 +6,16 @@
 // keybinding would call) rather than through bar.shell.firstPartyServiceFor:
 // that accessor only proxies a small allowlisted surface (doNotDisturb) to
 // third-party plugins and does not expose historyDir/clearHistory directly.
+//
+// Popup timeout: the service already expires low/normal toasts after 5-8 s,
+// but critical-urgency ones (duration 0) stay until clicked. This widget
+// sweeps the service's per-popup files and dismisses any toast older than
+// popupTimeoutMs through the same IPC, which moves it into history.
+//
+// Do Not Disturb is the service's own: while on, toasts are not shown and go
+// straight to history. Read/set through IPC (isDnd/setDnd) because the
+// firstPartyServiceFor proxy is only handed to full bars and Indicators
+// clones, not to plain bar widgets like this one.
 
 import QtQuick
 import Quickshell
@@ -20,7 +30,11 @@ BarWidget {
   moduleName: "julss.notifications"
 
   readonly property string home: Quickshell.env("HOME") || ""
-  readonly property string historyDir: root.home + "/.local/state/omarchy/notifications/history/"
+  readonly property string popupDir: root.home + "/.local/state/omarchy/notifications/"
+  readonly property string historyDir: root.popupDir + "history/"
+  readonly property int popupTimeoutMs: 30000
+
+  property bool dnd: false
 
   property var entries: []
   readonly property int count: entries.length
@@ -39,6 +53,7 @@ BarWidget {
     target.anchorItem = button
     target.hostWidget = root
     target.entries = root.entries
+    target.dnd = root.dnd
   }
 
   function refresh() {
@@ -46,6 +61,34 @@ BarWidget {
     historyProc.command = ["bash", "-c",
       "awk 1 \"$1\"/*.json 2>/dev/null || true", "--", root.historyDir]
     historyProc.running = true
+  }
+
+  function setDnd(value) {
+    if (setDndProc.running) return
+    root.dnd = !!value
+    setDndProc.command = ["omarchy-shell", "-q", "notifications", "setDnd", root.dnd ? "on" : "off"]
+    setDndProc.running = true
+  }
+
+  function readDnd() {
+    if (dndProc.running || setDndProc.running) return
+    dndProc.running = true
+  }
+
+  function sweepPopups() {
+    if (popupProc.running || dismissProc.running) return
+    popupProc.command = ["bash", "-c",
+      "awk 1 \"$1\"/*.json 2>/dev/null || true", "--", root.popupDir]
+    popupProc.running = true
+  }
+
+  function dismissStale(raw) {
+    var summaries = HistoryLogic.expiredPopupSummaries(
+      HistoryLogic.parseHistoryFile(raw), Date.now(), root.popupTimeoutMs)
+    if (summaries.length === 0) return
+    dismissProc.command = ["bash", "-c",
+      "for s in \"$@\"; do omarchy-shell -q notifications dismiss \"$s\"; done", "--"].concat(summaries)
+    dismissProc.running = true
   }
 
   function clearAll() {
@@ -63,8 +106,12 @@ BarWidget {
   onBarChanged: injectPanel()
   onSettingsChanged: injectPanel()
   onEntriesChanged: injectPanel()
+  onDndChanged: injectPanel()
 
-  Component.onCompleted: refresh()
+  Component.onCompleted: {
+    refresh()
+    readDnd()
+  }
 
   Timer {
     id: pollTimer
@@ -80,6 +127,46 @@ BarWidget {
       waitForEnd: true
       onStreamFinished: root.entries = HistoryLogic.parseHistoryFile(text)
     }
+  }
+
+  Timer {
+    interval: 2000
+    running: true
+    repeat: true
+    onTriggered: {
+      root.sweepPopups()
+      root.readDnd()
+    }
+  }
+
+  Process {
+    id: popupProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.dismissStale(text)
+    }
+  }
+
+  Process {
+    id: dndProc
+    command: ["omarchy-shell", "notifications", "isDnd"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        var state = text.trim()
+        if (state === "on" || state === "off") root.dnd = state === "on"
+      }
+    }
+  }
+
+  Process {
+    id: setDndProc
+    onExited: root.readDnd()
+  }
+
+  Process {
+    id: dismissProc
+    onExited: root.refresh()
   }
 
   Process {
@@ -103,8 +190,8 @@ BarWidget {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: "󰂚"
-    tooltipText: "Notificaciones"
+    text: root.dnd ? "󰂛" : "󰂚"
+    tooltipText: root.dnd ? "Notificaciones (no molestar)" : "Notificaciones"
     onPressed: root.toggle()
   }
 

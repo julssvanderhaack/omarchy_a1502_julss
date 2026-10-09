@@ -49,9 +49,37 @@ function timeAgo(timestamp, now) {
   return days + " d"
 }
 
+// Summaries of on-screen popups that have outlived timeoutMs. The built-in
+// service's only per-popup IPC is `dismiss <summary substring>`, which takes
+// down every popup whose summary contains the needle — so a stale popup whose
+// summary is contained in a still-fresh one's is held back until that one
+// ages out too, rather than yanking the fresh one early. Popups without a
+// summary can't be targeted and are left to the service.
+function expiredPopupSummaries(popups, now, timeoutMs) {
+  var stale = []
+  var fresh = []
+  for (var i = 0; i < popups.length; i++) {
+    var p = popups[i]
+    if (now - (p.timestamp || 0) >= timeoutMs) stale.push(p)
+    else fresh.push(p)
+  }
+  var result = []
+  for (var j = 0; j < stale.length; j++) {
+    var needle = stale[j].summary
+    if (!needle || result.indexOf(needle) !== -1) continue
+    var collides = false
+    for (var k = 0; k < fresh.length; k++) {
+      if (fresh[k].summary.indexOf(needle) !== -1) { collides = true; break }
+    }
+    if (!collides) result.push(needle)
+  }
+  return result
+}
+
 if (typeof module !== "undefined") {
   module.exports = {
     parseHistoryFile: parseHistoryFile,
-    timeAgo: timeAgo
+    timeAgo: timeAgo,
+    expiredPopupSummaries: expiredPopupSummaries
   }
 }

@@ -18,7 +18,7 @@ bash/bashrc                     # ~/.bashrc — carga ble.sh (autosugerencias ti
 plugins/                        # Plugins propios de la barra (~/.config/omarchy/plugins/)
 ├── julss.clock/                # Reloj con formato/verticalFormat personalizados
 ├── julss.menu/                 # Menú/launcher propio
-├── julss.notifications/        # Historial de notificaciones + "Borrar todas"
+├── julss.notifications/        # Historial de notificaciones + "Borrar todas", popups fuera a los 30 s, modo no molestar
 └── julss.places/                # Marcadores de Nautilus + expulsar unidades extraíbles
 system/                         # Ficheros de sistema (install.sh pregunta antes de instalarlos con sudo)
 ├── etc/modprobe.d/mbp12-woofers.conf                 # Carga el patch de HDA que reactiva los woofers

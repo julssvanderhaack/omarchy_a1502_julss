@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "id": "julss.notifications",
   "name": "Notifications",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "julss",
-  "description": "Gestor de notificaciones: muestra el historial guardado por Omarchy y permite borrarlo entero",
+  "description": "Gestor de notificaciones: muestra el historial guardado por Omarchy, permite borrarlo, quita los popups a los 30 s y tiene modo no molestar",
   "kinds": [
     "bar-widget"
   ],

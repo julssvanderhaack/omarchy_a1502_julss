@@ -14,6 +14,7 @@ Panel {
   property var anchorItem: null
   property var hostWidget: null
   property var entries: []
+  property bool dnd: false
 
   // Ticks while the panel is open so "hace X min" stays roughly accurate
   // without re-reading the history files just to update a clock.
@@ -22,6 +23,10 @@ Panel {
   function open() {
     root.controller.show()
     if (root.hostWidget) root.hostWidget.refresh()
+  }
+
+  function toggleDnd() {
+    if (root.hostWidget) root.hostWidget.setDnd(!root.dnd)
   }
 
   function clearAll() {
@@ -86,6 +91,31 @@ Panel {
             fontSize: Style.font.caption
             iconSize: Style.font.caption
             onClicked: root.clearAll()
+          }
+        }
+
+        RowLayout {
+          width: parent.width
+
+          Text {
+            Layout.fillWidth: true
+            textFormat: Text.PlainText
+            text: root.dnd ? "Solo en esta lista" : "También en pantalla"
+            color: Qt.darker(root.barForeground, 1.4)
+            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+            font.pixelSize: Style.font.caption
+            elide: Text.ElideRight
+          }
+
+          Button {
+            text: root.dnd ? "No molestar: sí" : "No molestar: no"
+            iconText: root.dnd ? "󰂛" : "󰂚"
+            bordered: true
+            foreground: root.dnd ? (root.bar ? root.bar.urgent : Color.urgent) : root.barForeground
+            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+            fontSize: Style.font.caption
+            iconSize: Style.font.caption
+            onClicked: root.toggleDnd()
           }
         }
 
