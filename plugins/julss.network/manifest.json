@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.network",
+  "name": "My Network",
+  "version": "1.0.0",
+  "author": "Omarchy",
+  "description": "Lista Wi-Fi y estado de la conexión, en castellano, con IP pública",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "My Network",
+    "description": "Lista Wi-Fi y estado de la conexión, en castellano, con IP pública",
+    "category": "Network",
+    "allowMultiple": false
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.network"
+  }
+}
