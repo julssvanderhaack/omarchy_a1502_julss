@@ -113,6 +113,66 @@ Panel {
     onTriggered: locationFile.reload()
   }
 
+  // julss: ubicación automática sin Google (weather-locate en esta carpeta):
+  // Wi-Fi conocida → BeaconDB + OpenStreetMap → IP. En modo manual se queda
+  // la ciudad elegida en el buscador.
+  readonly property string locateScript: Quickshell.env("HOME") + "/.config/omarchy/plugins/julss.weather/weather-locate"
+  property string locationMode: "auto"
+  property string locateMessage: ""
+
+  property FileView modeFile: FileView {
+    path: Quickshell.env("HOME") + "/.local/state/omarchy/settings/weather-mode"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.locationMode = String(text()).trim() === "manual" ? "manual" : "auto"
+    onLoadFailed: root.locationMode = "auto"
+  }
+
+  function runLocate(args) {
+    if (locateProc.running) return
+    locateProc.command = [root.locateScript].concat(args)
+    locateProc.running = true
+  }
+
+  function setLocationMode(mode) {
+    root.locationMode = mode
+    root.locateMessage = mode === "auto" ? "Buscando tu ubicación…" : ""
+    runLocate(["--mode", mode])
+  }
+
+  function rememberWifi() {
+    root.locateMessage = ""
+    runLocate(["--remember"])
+  }
+
+  property Process locateProc: Process {
+    stdout: StdioCollector { id: locateOut; waitForEnd: true }
+    stderr: StdioCollector { id: locateErr; waitForEnd: true }
+    onExited: function(exitCode) {
+      var args = locateProc.command || []
+      if (args.indexOf("--remember") !== -1) {
+        if (exitCode === 0) {
+          root.locateMessage = "Recordado: " + locateOut.text.trim()
+          root.setLocationMode("auto")
+        } else {
+          root.locateMessage = locateErr.text.trim() || "No se pudo recordar"
+        }
+      } else if (args.indexOf("--apply") !== -1 || args.indexOf("auto") !== -1) {
+        root.locateMessage = exitCode === 0 ? "" : "No se pudo detectar la ubicación"
+      }
+    }
+  }
+
+  // En modo automático, revisa la ubicación al arrancar y cada 15 minutos.
+  Timer {
+    interval: 15 * 60 * 1000
+    running: root.locationMode === "auto"
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.runLocate(["--apply"])
+  }
+
   property int forecastRetries: 0
   property int dailyForecastRetries: 0
 
@@ -229,9 +289,13 @@ Panel {
   }
 
   function clearLocation() {
-    persistLocation("", null, null)
     wttrLocation = ""
     cancelEditingLocation()
+    setLocationMode("auto")
+  }
+
+  property Process modeWriteProc: Process {
+    command: [root.locateScript, "--mode", "manual"]
   }
 
   function pickSuggestion(suggestion) {
@@ -251,6 +315,10 @@ Panel {
   }
 
   function persistLocation(name, latitude, longitude) {
+    if (name && root.locationMode !== "manual") {
+      root.locationMode = "manual"
+      modeWriteProc.running = true
+    }
     if (name && latitude !== null && longitude !== null)
       locationSaveProc.command = ["omarchy-weather-location", "--set", name, latitude + "," + longitude]
     else if (name)
@@ -674,6 +742,53 @@ Panel {
                 onClicked: root.clearLocation()
               }
             }
+          }
+
+          Row {
+            visible: !root.editingLocation
+            spacing: Style.space(6)
+
+            Button {
+              text: root.locationMode === "auto" ? "Automática" : "Manual"
+              iconText: root.locationMode === "auto" ? "󰆤" : "󰍎"
+              tooltipText: root.locationMode === "auto"
+                ? "Detecta dónde estás (Wi-Fi conocida, BeaconDB o IP). Pulsa para fijarla"
+                : "Ubicación elegida a mano. Pulsa para volver a detectarla"
+              bordered: true
+              active: root.locationMode === "auto"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              fontSize: Style.font.caption
+              iconSize: Style.font.caption
+              horizontalPadding: Style.spacing.sm
+              onClicked: root.setLocationMode(root.locationMode === "auto" ? "manual" : "auto")
+            }
+
+            Button {
+              visible: root.locationMode === "manual" && root.configuredLocationState.latitude !== null
+              text: "Recordar esta Wi-Fi"
+              iconText: "󰖩"
+              tooltipText: "Cuando estés conectado a esta Wi-Fi, usar esta ubicación"
+              bordered: true
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              fontSize: Style.font.caption
+              iconSize: Style.font.caption
+              horizontalPadding: Style.spacing.sm
+              onClicked: root.rememberWifi()
+            }
+
+          }
+
+          Text {
+            visible: !root.editingLocation && root.locateMessage !== ""
+            width: parent.width
+            textFormat: Text.PlainText
+            text: root.locateMessage
+            color: Qt.darker(root.bar.foreground, 1.4)
+            font.family: root.bar.fontFamily
+            font.pixelSize: Style.font.caption
+            elide: Text.ElideRight
           }
 
           Row {

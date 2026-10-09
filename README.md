@@ -28,7 +28,7 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.speedtest/            # Test de velocidad, en castellano
 ├── julss.system-update/        # Aviso de actualizaciones, en castellano
 ├── julss.tray/                 # Bandeja del sistema, en castellano
-├── julss.weather/              # Tiempo (días y búsqueda de ciudades en castellano)
+├── julss.weather/              # Tiempo en castellano + ubicación automática sin Google (Wi-Fi recordada → BeaconDB/OSM → IP) o manual
 ├── julss.wifiqr/               # QR de la Wi-Fi, en castellano
 ├── julss.audio/                # Panel Sonido en castellano + sección APLICACIONES siempre visible (volumen y silencio por app)
 ├── julss.clock/                # Reloj con segundos + calendario, en castellano (locale es_ES)

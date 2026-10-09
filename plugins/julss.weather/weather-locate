@@ -1,0 +1,100 @@
+#!/bin/bash
+# Ubicación para el tiempo sin Google.
+#
+#   weather-locate            imprime JSON {name, latitude, longitude, source}
+#   weather-locate --apply    lo mismo y, si cambió, lo guarda con
+#                             omarchy-weather-location (solo en modo auto)
+#   weather-locate --remember asocia la Wi-Fi conectada a la ubicación actual
+#   weather-locate --mode auto|manual   cambia de modo
+#
+# Orden en modo auto:
+#   1. Wi-Fi conectada que ya conocemos (aprendida con --remember)
+#   2. BeaconDB (geolocalización libre por Wi-Fi) + Nominatim (OpenStreetMap)
+#      para el nombre del pueblo
+#   3. IP (ip-api.com)
+
+set -uo pipefail
+
+STATE="$HOME/.local/state/omarchy/settings"
+LOC_FILE="$STATE/weather.json"
+MODE_FILE="$STATE/weather-mode"
+PLACES_FILE="$STATE/weather-places.json"
+UA="omarchy-weather-julss/1.0 (https://github.com/julssvanderhaack/omarchy_a1502_julss)"
+
+mkdir -p "$STATE"
+[[ -f $PLACES_FILE ]] || echo '[]' >"$PLACES_FILE"
+
+mode() { [[ -f $MODE_FILE ]] && cat "$MODE_FILE" || echo auto; }
+
+connected_wifi() {
+  # BSSID<TAB>SSID de la red conectada (nmcli escapa los ':' del BSSID).
+  LC_ALL=C nmcli -t -f ACTIVE,BSSID,SSID dev wifi 2>/dev/null |
+    awk -F: '$1 == "yes" { bssid = $2":"$3":"$4":"$5":"$6":"$7; gsub(/\\/, "", bssid); ssid = $8; for (i = 9; i <= NF; i++) ssid = ssid ":" $i; print tolower(bssid) "\t" ssid; exit }'
+}
+
+from_known_wifi() {
+  local bssid ssid
+  IFS=$'\t' read -r bssid ssid <<<"$(connected_wifi)"
+  [[ -n ${bssid:-} ]] || return 1
+  jq -ce --arg b "$bssid" --arg s "$ssid" '
+    (map(select(.bssid == $b)) + map(select(.ssid == $s and $s != ""))) | first
+    | select(. != null) | {name, latitude, longitude, source: "wifi-conocida"}' "$PLACES_FILE"
+}
+
+from_beacondb() {
+  local body pos lat lon name
+  body=$(LC_ALL=C nmcli -t -f BSSID,SIGNAL,FREQ dev wifi list 2>/dev/null |
+    awk -F: '{ b = $1":"$2":"$3":"$4":"$5":"$6; gsub(/\\/, "", b); printf "{\"macAddress\":\"%s\",\"signalStrength\":%d,\"frequency\":%d}\n", tolower(b), int($7 / 2) - 100, $8 + 0 }' |
+    jq -s '{considerIp: false, wifiAccessPoints: .}')
+  [[ $(jq '.wifiAccessPoints | length' <<<"$body") -ge 2 ]] || return 1
+  pos=$(curl -fsS --max-time 8 -A "$UA" -H 'Content-Type: application/json' -d "$body" https://api.beacondb.net/v1/geolocate) || return 1
+  lat=$(jq -r '.location.lat' <<<"$pos"); lon=$(jq -r '.location.lng' <<<"$pos")
+  [[ $lat != null && $lon != null ]] || return 1
+  name=$(curl -fsS --max-time 8 -A "$UA" \
+    "https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=12&accept-language=es&lat=$lat&lon=$lon" |
+    jq -r '.address | (.town // .village // .city // .municipality // .suburb // empty)')
+  [[ -n $name ]] || name="Mi ubicación"
+  jq -cn --arg n "$name" --argjson la "$lat" --argjson lo "$lon" '{name: $n, latitude: $la, longitude: $lo, source: "beacondb"}'
+}
+
+from_ip() {
+  curl -fsS --max-time 6 "http://ip-api.com/json/?fields=status,city,lat,lon" |
+    jq -ce 'select(.status == "success") | {name: .city, latitude: .lat, longitude: .lon, source: "ip"}'
+}
+
+locate() { from_known_wifi || from_beacondb || from_ip; }
+
+case "${1:-}" in
+--mode)
+  [[ ${2:-} == auto || ${2:-} == manual ]] || { echo "Uso: weather-locate --mode auto|manual" >&2; exit 1; }
+  echo "$2" >"$MODE_FILE"
+  [[ $2 == auto ]] && exec "$0" --apply
+  ;;
+--remember)
+  IFS=$'\t' read -r bssid ssid <<<"$(connected_wifi)"
+  [[ -n ${bssid:-} ]] || { echo "No hay Wi-Fi conectada" >&2; exit 1; }
+  [[ -f $LOC_FILE ]] || { echo "No hay ubicación que recordar" >&2; exit 1; }
+  jq -e '.name and .latitude and .longitude' "$LOC_FILE" >/dev/null || { echo "La ubicación no tiene coordenadas" >&2; exit 1; }
+  tmp=$(mktemp "$STATE/.places.XXXXXX")
+  jq --arg b "$bssid" --arg s "$ssid" --slurpfile loc "$LOC_FILE" '
+    map(select(.bssid != $b)) + [{bssid: $b, ssid: $s} + ($loc[0] | {name, latitude, longitude})]' \
+    "$PLACES_FILE" >"$tmp" && mv "$tmp" "$PLACES_FILE"
+  echo "$ssid → $(jq -r .name "$LOC_FILE")"
+  ;;
+--apply)
+  [[ $(mode) == auto ]] || exit 0
+  found=$(locate) || exit 1
+  name=$(jq -r .name <<<"$found"); lat=$(jq -r .latitude <<<"$found"); lon=$(jq -r .longitude <<<"$found")
+  current=$(jq -c '{name, latitude, longitude}' "$LOC_FILE" 2>/dev/null)
+  wanted=$(jq -c '{name, latitude, longitude}' <<<"$found")
+  [[ $current == "$wanted" ]] || omarchy-weather-location --set "$name" "$lat,$lon"
+  echo "$found"
+  ;;
+"")
+  locate
+  ;;
+*)
+  echo "Uso: weather-locate [--apply|--remember|--mode auto|manual]" >&2
+  exit 1
+  ;;
+esac
