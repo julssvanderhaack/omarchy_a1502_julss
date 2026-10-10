@@ -38,7 +38,7 @@ hl.unbind("SUPER + SHIFT + M")
 hl.unbind("SUPER + M")
 hl.unbind("SUPER + B")
 o.bind("SUPER + SHIFT + M", "Telegram", "Telegram")
-o.bind("SUPER + + M", "Telegram", "Telegram")
+o.bind("SUPER + M", "Telegram", "Telegram")
 o.bind("SUPER + B","Chromium Browser","chromium")
 hl.unbind("SUPER + Z")
 o.bind("SUPER + Z", "Spotify", "spotify")
@@ -53,3 +53,10 @@ o.bind("SUPER + Z", "Spotify", "spotify")
 -- plugin can't find its keybinding and shows a "No keybinding found" error.
 dofile(os.getenv("HOME") .. "/.config/omarchy/plugins/vbrosseau.alttab/omarchy-plugin/alttab-bindings.lua")
 
+
+-- Claude Code en una terminal (ruta absoluta: mise no está en el PATH de Hyprland)
+o.bind("SUPER + A", "Claude", { tui = os.getenv("HOME") .. "/.local/share/mise/installs/claude/latest/claude" })
+
+-- Menú de atajos en castellano (antes: omarchy-menu-keybindings, en inglés).
+hl.unbind("SUPER + K")
+o.bind("SUPER + K", "Keybindings", "julss-menu-keybindings")

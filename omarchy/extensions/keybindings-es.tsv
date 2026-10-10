@@ -1,0 +1,162 @@
+# Traducción de las descripciones del menú de atajos (Super+K).
+# Inglés<TAB>Castellano. "N" representa un número (escritorio, panel…).
+Activity	Actividad
+Agent	Agente
+Alt-Tab switcher	Selector Alt+Tab
+Apps menu	Menú de aplicaciones
+Audio	Sonido
+Background switcher	Cambiar fondo de pantalla
+Bar panel N	Panel N de la barra
+Bluetooth	Bluetooth
+Brightness down	Bajar brillo
+Brightness down precise	Bajar brillo (fino)
+Brightness maximum	Brillo máximo
+Brightness minimum	Brillo mínimo
+Brightness up	Subir brillo
+Brightness up precise	Subir brillo (fino)
+Browser	Navegador
+Browser (private)	Navegador (privado)
+Calculator	Calculadora
+Calendar	Calendario
+Capture menu	Menú de capturas
+Chromium Browser	Navegador Chromium
+Clear reminders	Borrar recordatorios
+Clipboard manager	Gestor del portapapeles
+Close all windows	Cerrar todas las ventanas
+Close window	Cerrar ventana
+Color picker	Selector de color
+Copy URL from Web App	Copiar URL de la web app
+Disable touchpad	Desactivar touchpad
+Dismiss all notifications	Descartar todas las notificaciones
+Dismiss last notification	Descartar la última notificación
+Display	Pantalla
+Download Video from Web App	Descargar vídeo de la web app
+Editor	Editor
+Eject media	Expulsar medio extraíble
+Emojis	Emojis
+Enable touchpad	Activar touchpad
+Expand window down	Agrandar ventana hacia abajo
+Expand window down a little	Agrandar ventana un poco hacia abajo
+Expand window down a lot	Agrandar ventana mucho hacia abajo
+Expand window left	Agrandar ventana hacia la izquierda
+Expand window left a little	Agrandar ventana un poco hacia la izquierda
+Expand window left a lot	Agrandar ventana mucho hacia la izquierda
+Extract text (OCR) from screenshot	Extraer texto (OCR) de una captura
+File manager	Gestor de archivos
+File manager (cwd)	Gestor de archivos (carpeta actual)
+Focus on above window	Enfocar la ventana de arriba
+Focus on below window	Enfocar la ventana de abajo
+Focus on left window	Enfocar la ventana de la izquierda
+Focus on next monitor	Enfocar el monitor siguiente
+Focus on previous monitor	Enfocar el monitor anterior
+Focus on previous window	Enfocar la ventana anterior
+Focus on right window	Enfocar la ventana de la derecha
+Former workspace	Escritorio anterior (último usado)
+Full screen	Pantalla completa
+Full width	Ancho completo
+Hardware menu	Menú de hardware
+Herdr keybindings	Atajos de Herdr
+Invoke last notification	Abrir la última notificación
+Keybindings	Atajos de teclado
+Keyboard backlight cycle	Ciclar retroiluminación del teclado
+Keyboard brightness down	Bajar luz del teclado
+Keyboard brightness up	Subir luz del teclado
+Lock system	Bloquear el sistema
+Make webcam overlay larger	Agrandar la webcam superpuesta
+Make webcam overlay smaller	Achicar la webcam superpuesta
+Monitor scaling down	Reducir escala del monitor
+Monitor scaling up	Aumentar escala del monitor
+Move active window out of group	Sacar la ventana del grupo
+Move grouped window focus left	Enfocar la ventana del grupo a la izquierda
+Move grouped window focus right	Enfocar la ventana del grupo a la derecha
+Move window	Mover ventana
+Move window silently to workspace N	Mover ventana al escritorio N (sin seguirla)
+Move window to group on bottom	Mover ventana al grupo de abajo
+Move window to group on left	Mover ventana al grupo de la izquierda
+Move window to group on right	Mover ventana al grupo de la derecha
+Move window to group on top	Mover ventana al grupo de arriba
+Move window to scratchpad	Mover ventana al bloc temporal
+Move window to workspace N	Mover ventana al escritorio N
+Move workspace to down monitor	Mover escritorio al monitor de abajo
+Move workspace to left monitor	Mover escritorio al monitor de la izquierda
+Move workspace to right monitor	Mover escritorio al monitor de la derecha
+Move workspace to up monitor	Mover escritorio al monitor de arriba
+Music TUI	Música (terminal)
+Mute	Silenciar
+Mute microphone	Silenciar micrófono
+Network	Red
+New email	Nuevo correo
+Next track	Pista siguiente
+Next window in group	Ventana siguiente del grupo
+Omarchy menu	Menú de Omarchy
+Open notification history	Abrir historial de notificaciones
+Passwords	Contraseñas
+Pause	Pausa
+Play	Reproducir
+Pop window out (float & pin)	Sacar ventana (flotante y fijada)
+Power	Energía
+Power menu	Menú de apagado
+Previous track	Pista anterior
+Previous window in group	Ventana anterior del grupo
+Previous workspace	Escritorio anterior
+Pseudo window	Pseudo-mosaico de la ventana
+Reset zoom	Restablecer zoom
+Resize window	Redimensionar ventana
+Restore window width	Restaurar ancho de la ventana
+Reveal active window on top	Traer la ventana activa al frente
+Save window width	Guardar ancho de la ventana
+Screenrecording	Grabación de pantalla
+Screenshot	Captura de pantalla
+Scroll active workspace backward	Desplazar escritorio hacia atrás
+Scroll active workspace forward	Desplazar escritorio hacia delante
+Set reminder	Crear recordatorio
+Share	Compartir
+Show battery remaining	Mostrar batería restante
+Show reminders	Mostrar recordatorios
+Show time	Mostrar la hora
+Shrink window left	Encoger ventana hacia la izquierda
+Shrink window left a little	Encoger ventana un poco hacia la izquierda
+Shrink window left a lot	Encoger ventana mucho hacia la izquierda
+Shrink window up	Encoger ventana hacia arriba
+Shrink window up a little	Encoger ventana un poco hacia arriba
+Shrink window up a lot	Encoger ventana mucho hacia arriba
+Swap window down	Intercambiar ventana con la de abajo
+Swap window to the left	Intercambiar ventana con la de la izquierda
+Swap window to the right	Intercambiar ventana con la de la derecha
+Swap window up	Intercambiar ventana con la de arriba
+Switch audio output	Cambiar salida de audio
+Switch media source	Cambiar fuente multimedia
+Switch to group window N	Ir a la ventana N del grupo
+Switch to workspace N	Ir al escritorio N
+System menu	Menú del sistema
+Terminal	Terminal
+Theme menu	Menú de temas
+Tiled full screen	Pantalla completa en mosaico
+Tmux keybindings	Atajos de Tmux
+Toggle laptop display	Activar/desactivar pantalla del portátil
+Toggle laptop display mirroring	Activar/desactivar duplicar pantalla del portátil
+Toggle locking on idle	Activar/desactivar bloqueo por inactividad
+Toggle menu	Mostrar/ocultar menú
+Toggle nightlight	Activar/desactivar luz nocturna
+Toggle scratchpad	Mostrar/ocultar bloc temporal
+Toggle silencing notifications	Activar/desactivar no molestar
+Toggle single-window square aspect	Activar/desactivar aspecto cuadrado (una ventana)
+Toggle top bar	Mostrar/ocultar la barra
+Toggle touchpad	Activar/desactivar touchpad
+Toggle weather	Mostrar/ocultar el tiempo
+Toggle window floating/tiling	Ventana flotante/mosaico
+Toggle window gaps	Activar/desactivar huecos entre ventanas
+Toggle window grouping	Agrupar/desagrupar ventanas
+Toggle window split	Cambiar división de la ventana
+Toggle window transparency	Activar/desactivar transparencia
+Toggle workspace layout	Cambiar disposición del escritorio
+Transcode	Convertir vídeo
+Universal copy	Copiar (universal)
+Universal cut	Cortar (universal)
+Universal paste	Pegar (universal)
+Volume down	Bajar volumen
+Volume down precise	Bajar volumen (fino)
+Volume up	Subir volumen
+Volume up precise	Subir volumen (fino)
+X Post	Publicar en X
+Zoom in	Acercar zoom

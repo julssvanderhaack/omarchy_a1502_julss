@@ -1,0 +1,70 @@
+#!/bin/bash
+# Menú de atajos de teclado (Super+K) en castellano.
+#
+# Ejecuta el omarchy-menu-keybindings de Omarchy tal cual (así recibe sus
+# actualizaciones), pero traduce las descripciones con
+# ~/.config/omarchy/extensions/keybindings-es.tsv antes de mostrarlas.
+# Las que no estén en la tabla salen como estaban.
+
+src=$(command -v omarchy-menu-keybindings) || exit 1
+TSV="$HOME/.config/omarchy/extensions/keybindings-es.tsv"
+
+translate_fn=$(cat <<'BASH'
+julss_translate() {
+  awk -v tsv="$JULSS_KEYBINDINGS_TSV" '
+    BEGIN {
+      FS = "\t"
+      while ((getline line < tsv) > 0) {
+        if (line ~ /^#/ || line == "") continue
+        split(line, p, "\t")
+        if (p[1] != "" && p[2] != "") es[p[1]] = p[2]
+      }
+      OFS = "\t"
+      n = split("SHIFT=MAYÚS RETURN=INTRO SPACE=ESPACIO ESCAPE=ESC DELETE=SUPR Delete=SUPR BACKSPACE=RETROCESO PRINT=IMPR_PANT TAB=TAB Home=INICIO UP=ARRIBA DOWN=ABAJO LEFT=IZQUIERDA RIGHT=DERECHA COMMA=COMA PERIOD=PUNTO MINUS=MENOS EQUAL=IGUAL SLASH=BARRA BRACKETLEFT=CORCHETE_IZQ BRACKETRIGHT=CORCHETE_DER mouse_down=RUEDA_ABAJO mouse_up=RUEDA_ARRIBA", kv, " ")
+      for (i = 1; i <= n; i++) { split(kv[i], q, "="); gsub(/_/, " ", q[2]); keyname[q[1]] = q[2] }
+    }
+    function translate_keys(k,    m, parts, i, out, w) {
+      gsub(/LEFT MOUSE BUTTON/, "CLIC_IZQUIERDO", k)
+      gsub(/RIGHT MOUSE BUTTON/, "CLIC_DERECHO", k)
+      gsub(/MIDDLE MOUSE BUTTON/, "CLIC_CENTRAL", k)
+      m = split(k, parts, " ")
+      out = ""
+      for (i = 1; i <= m; i++) {
+        w = parts[i]
+        if (w in keyname) w = keyname[w]
+        gsub(/_/, " ", w)
+        out = out (out == "" ? "" : " ") w
+      }
+      return out
+    }
+    {
+      sep = "→ "
+      arrow = index($1, sep)
+      if (arrow > 0) {
+        keys = substr($1, 1, arrow - 1 + length(sep))
+        desc = substr($1, arrow + length(sep))
+        if (desc in es) {
+          desc = es[desc]
+        } else if (match(desc, /[0-9]+/)) {
+          num = substr(desc, RSTART, RLENGTH)
+          tmpl = substr(desc, 1, RSTART - 1) "N" substr(desc, RSTART + RLENGTH)
+          if (tmpl in es) { desc = es[tmpl]; sub(/N/, num, desc) }
+        }
+        k = substr(keys, 1, arrow - 1)
+        sub(/[ \t]+$/, "", k)
+        $1 = sprintf("%-36s", translate_keys(k)) sep desc
+      }
+      print
+    }'
+}
+BASH
+)
+
+patched=$(sed \
+  -e 's/^  records=$(output_binding_records)$/  records=$(output_binding_records | julss_translate)/' \
+  -e "s/omarchy-menu-select 'Keybindings'/omarchy-menu-select 'Atajos de teclado'/" \
+  -e 's/^  output_keybindings$/  output_keybindings | julss_translate/' \
+  "$src")
+
+export JULSS_KEYBINDINGS_TSV="$TSV"
+exec bash -c "$translate_fn"$'\n'"$patched" omarchy-menu-keybindings "$@"

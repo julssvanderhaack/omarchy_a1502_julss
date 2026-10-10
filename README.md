@@ -12,7 +12,8 @@ omarchy/
 └── extensions/omarchy-menu.jsonc  # ~/.config/omarchy/extensions/omarchy-menu.jsonc
 bin/                            # ~/.local/bin/ — scripts usados por el menú
 ├── julss-flatpak-install       # Instalar → Flatpak (fzf sobre Flathub)
-└── julss-flatpak-remove        # Desinstalar → Flatpak
+├── julss-flatpak-remove        # Desinstalar → Flatpak
+└── julss-menu-keybindings     # Super+K: menú de atajos en castellano (traduce el de Omarchy con omarchy/extensions/keybindings-es.tsv)
 chromium/chromium-flags.conf    # ~/.config/chromium-flags.conf — Wayland + decodificación de vídeo por hardware
 bash/bashrc                     # ~/.bashrc — carga ble.sh (autosugerencias tipo fish)
 plugins/                        # Plugins propios de la barra (~/.config/omarchy/plugins/)

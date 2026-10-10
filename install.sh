@@ -26,6 +26,7 @@ done
 # omarchy/shell.json and extensions
 backup_and_copy "$REPO_DIR/omarchy/shell.json" "$CONFIG_DIR/omarchy/shell.json"
 backup_and_copy "$REPO_DIR/omarchy/extensions/omarchy-menu.jsonc" "$CONFIG_DIR/omarchy/extensions/omarchy-menu.jsonc"
+backup_and_copy "$REPO_DIR/omarchy/extensions/keybindings-es.tsv" "$CONFIG_DIR/omarchy/extensions/keybindings-es.tsv"
 
 # own scripts (menu actions) into ~/.local/bin
 for f in "$REPO_DIR"/bin/*; do

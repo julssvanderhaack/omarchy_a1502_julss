@@ -24,7 +24,7 @@
   "system.logout": {"icon": "󰍃", "label": "Cerrar sesión", "action": "omarchy-system-logout"},
   "system.reboot": {"icon": "󰜉", "label": "Reiniciar", "action": "omarchy-system-reboot"},
   "system.shutdown": {"icon": "󰐥", "label": "Apagar", "action": "omarchy-system-shutdown"},
-  "learn.keybindings": {"icon": "", "label": "Atajos de teclado", "action": "omarchy-menu-keybindings"},
+  "learn.keybindings": {"icon": "", "label": "Atajos de teclado", "action": "julss-menu-keybindings"},
   "learn.omarchy": {"icon": "", "label": "Omarchy", "action": "omarchy-launch-webapp 'https://omarchy.org/manual/'"},
   "learn.hyprland": {"icon": "", "label": "Hyprland", "action": "omarchy-launch-webapp 'https://wiki.hypr.land/'"},
   "learn.arch": {"icon": "󰣇", "label": "Arch", "action": "omarchy-launch-webapp 'https://wiki.archlinux.org/title/Main_page'"},
