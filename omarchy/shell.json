@@ -1,6 +1,6 @@
 {
   "bar": {
-    "centerAnchor": "omarchy.weather",
+    "centerAnchor": "omarchy.indicators",
     "layout": {
       "center": [
         {
@@ -15,9 +15,6 @@
             "NightLight",
             "StayAwake"
           ]
-        },
-        {
-          "id": "julss.weather"
         },
         {
           "id": "julss.system-update"
@@ -71,6 +68,9 @@
           "format": "ddd d MMM HH:mm:ss",
           "formatAlt": "d 'de' MMMM 'S'ww yyyy",
           "verticalFormat": "HH\n—\nmm"
+        },
+        {
+          "id": "julss.weather"
         },
         {
           "id": "julss.notifications"
