@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.webcam",
+  "name": "Webcam",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Activa y desactiva el driver de la webcam FaceTime HD (facetimehd)",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Webcam",
+    "description": "Activa y desactiva el driver de la webcam FaceTime HD",
+    "category": "System",
+    "allowMultiple": false
+  }
+}

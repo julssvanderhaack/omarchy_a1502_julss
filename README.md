@@ -41,14 +41,20 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.power/                # Panel Batería en castellano + salud (capacidad máx. / de diseño, %)
 ├── julss.network/              # Panel Wi-Fi/red en castellano + IP pública (vía api.ipify.org) + botón ↻ discreto para reiniciar la wifi
 ├── julss.places/               # Marcadores de Nautilus + expulsar unidades extraíbles
+├── julss.webcam/                # Botón en el centro de la barra: activa/desactiva el driver de la webcam FaceTime HD
 └── julss.workspaces/           # Escritorios sin huecos en la numeración; el activo como cuadrado relleno con el número
 patches/
 └── monitor-layout-es.patch     # Traducción al castellano del plugin de terceros Monitor Layout (ver abajo)
 system/                         # Ficheros de sistema (install.sh pregunta antes de instalarlos con sudo)
+├── etc/modprobe.d/blacklist-facetimehd.conf          # La webcam arranca con el driver sin cargar
 ├── etc/modprobe.d/mbp12-woofers.conf                 # Carga el patch de HDA que reactiva los woofers
 ├── etc/systemd/system/thunderbolt-aspm.service      # Aplica thunderbolt-aspm al arrancar y al despertar
 ├── usr/lib/firmware/hda-mbp12-woofers.fw            # Patch HDA: restaura el pin 0x13 (woofers) del CS4208
+├── usr/lib/systemd/system-sleep/facetimehd-sleep.sh # Descarga el driver de la webcam antes de suspender
 ├── usr/lib/systemd/system-sleep/julss-wifi-resume   # Hook al despertar de la suspensión
+├── usr/local/bin/facetimehd-aspm-set.sh             # Ajusta ASPM en el enlace PCIe de la webcam
+├── usr/local/bin/facetimehd-camera-off.sh           # Webcam: descarga el driver y reactiva ASPM
+├── usr/local/bin/facetimehd-camera-on.sh            # Webcam: carga el driver y desactiva ASPM
 ├── usr/local/bin/julss-wifi-resume-check            # Comprueba/recupera la wifi tras despertar
 └── usr/local/bin/thunderbolt-aspm                   # Activa ASPM L1 en el enlace del Thunderbolt 2
 ```
@@ -95,6 +101,23 @@ comprobar, reinicia la radio y, si hace falta, recarga el driver. El resultado
 llega como notificación. A mano: `sudo julss-wifi-resume-check --force`.
 
 Registro: `journalctl -u julss-wifi-resume-check`.
+
+## Webcam FaceTime HD
+
+El driver `facetimehd` no viene en el kernel; se instala desde AUR:
+
+```bash
+yay -S facetimehd-dkms facetimehd-firmware
+```
+
+Con el driver cargado y ASPM desactivado (necesario para que la imagen salga
+sin artefactos) la CPU no llega a sus C-states profundos, así que por defecto
+está **desactivado**: `blacklist-facetimehd.conf` evita que se cargue al
+arrancar y `facetimehd-sleep.sh` lo descarga antes de suspender.
+
+El botón `julss.webcam` del centro de la barra lo cambia (con `pkexec`, pide
+contraseña): icono oscuro = driver descargado, blanco = cargado,
+verde = alguna app está usando la cámara.
 
 ## Vídeo en Chromium (VA-API + H.264)
 
