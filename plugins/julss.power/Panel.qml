@@ -290,12 +290,43 @@ Panel {
     text: root.showPercentage && !vertical
       ? root.batteryPercent + "% " + root.batteryIcon()
       : root.batteryIcon()
+    // With the percentage shown, only the icon takes the level colour: the
+    // two are drawn as separate texts instead of the single glyph string.
+    iconComponent: root.showPercentage && !vertical ? percentAndIcon : null
     slotSize: Style.bar.iconSlot * (root.showPercentage && !vertical ? 2 : 1)
     tooltipText: ""
     onPressed: function(b) {
       if (!root.batteryPresent) return
       if (b === Qt.RightButton) root.togglePercentage()
       else root.toggle()
+    }
+  }
+
+  Component {
+    id: percentAndIcon
+
+    Item {
+      Row {
+        anchors.centerIn: parent
+
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          textFormat: Text.PlainText
+          text: root.batteryPercent + "% "
+          color: root.bar ? root.bar.foreground : Color.foreground
+          font.family: button.fontFamily
+          font.pixelSize: button.fontSize
+        }
+
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          textFormat: Text.PlainText
+          text: root.batteryIcon()
+          color: root.batteryLevelColor
+          font.family: button.fontFamily
+          font.pixelSize: button.fontSize
+        }
+      }
     }
   }
 
