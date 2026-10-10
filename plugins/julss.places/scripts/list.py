@@ -18,6 +18,53 @@ import subprocess
 from urllib.parse import unquote, urlparse
 
 
+XDG_KINDS = {
+    "DOWNLOAD": "downloads", "DOCUMENTS": "documents", "MUSIC": "music",
+    "PICTURES": "pictures", "VIDEOS": "videos", "DESKTOP": "desktop",
+    "TEMPLATES": "templates", "PUBLICSHARE": "public",
+}
+
+# Carpetas sin ruta XDG, reconocidas por su nombre (en minúsculas).
+NAME_KINDS = {
+    "dropbox": "dropbox",
+    "nextcloud": "cloud", "onedrive": "cloud", "google drive": "cloud", "mega": "cloud", "drive": "cloud",
+    "proyectos": "code", "projects": "code", "code": "code", "src": "code", "dev": "code", "git": "code", "repos": "code",
+    "juegos": "games", "games": "games", "roms": "games",
+    "libros": "books", "books": "books",
+    "trabajo": "work", "work": "work",
+    "descargas": "downloads", "downloads": "downloads",
+    "documentos": "documents", "documents": "documents",
+    "música": "music", "musica": "music", "music": "music",
+    "imágenes": "pictures", "imagenes": "pictures", "pictures": "pictures", "fotos": "pictures", "photos": "pictures",
+    "vídeos": "videos", "videos": "videos",
+    "escritorio": "desktop", "desktop": "desktop",
+    "plantillas": "templates", "templates": "templates",
+    "público": "public", "publico": "public", "public": "public",
+}
+
+
+def xdg_dirs():
+    """Ruta -> tipo, según xdg-user-dir (ignora las que apuntan a $HOME)."""
+    home = os.path.realpath(os.path.expanduser("~"))
+    found = {}
+    for key, kind in XDG_KINDS.items():
+        try:
+            out = subprocess.run(["xdg-user-dir", key], capture_output=True, text=True, timeout=2).stdout.strip()
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        real = os.path.realpath(out) if out else ""
+        if real and real != home:
+            found[real] = kind
+    return found
+
+
+def folder_kind(path, xdg):
+    real = os.path.realpath(path)
+    if real in xdg:
+        return xdg[real]
+    return NAME_KINDS.get(os.path.basename(real.rstrip("/")).lower(), "folder")
+
+
 def read_bookmarks():
     path = os.path.expanduser("~/.config/gtk-3.0/bookmarks")
     items = []
@@ -35,7 +82,7 @@ def read_bookmarks():
                 label = parts[1].strip() if len(parts) > 1 and parts[1].strip() else (
                     os.path.basename(folder_path.rstrip("/")) or folder_path
                 )
-                items.append({"label": label, "path": folder_path})
+                items.append({"label": label, "path": folder_path, "kind": folder_kind(folder_path, XDG)})
     except OSError:
         pass
     return items
@@ -81,6 +128,9 @@ def collect_media():
         walk(device, False, None)
 
     return media
+
+
+XDG = xdg_dirs()
 
 
 def main():

@@ -22,6 +22,30 @@ Panel {
   readonly property string listScript: localPath(Qt.resolvedUrl("scripts/list.py"))
   readonly property string ejectScript: localPath(Qt.resolvedUrl("scripts/eject.sh"))
 
+  // Icono según el tipo de carpeta (lo calcula scripts/list.py).
+  readonly property var folderIcons: ({
+    "home": "󰋜",
+    "downloads": "󰇚",
+    "documents": "󰈙",
+    "music": "󰝚",
+    "pictures": "󰋩",
+    "videos": "󰕧",
+    "desktop": "󰇄",
+    "templates": "󰈤",
+    "public": "󰒖",
+    "dropbox": "󰇣",
+    "cloud": "󰅟",
+    "code": "󰅩",
+    "games": "󰊴",
+    "books": "󰂺",
+    "work": "󰃖",
+    "folder": "󰉋"
+  })
+
+  function folderIcon(kind) {
+    return root.folderIcons[kind] || root.folderIcons["folder"]
+  }
+
   function localPath(url) {
     var value = String(url || "")
     if (value.indexOf("file://") === 0) value = value.substring(7)
@@ -132,7 +156,7 @@ Panel {
         PlaceRow {
           label: root.homePlace.label || "Inicio"
           detail: ""
-          iconText: ""
+          iconText: root.folderIcon("home")
           bar: root.bar
           onActivated: root.openPath(root.homePlace.path)
         }
@@ -144,7 +168,7 @@ Panel {
             required property var modelData
             label: modelData.label
             detail: ""
-            iconText: ""
+            iconText: root.folderIcon(modelData.kind)
             bar: root.bar
             onActivated: root.openPath(modelData.path)
           }
@@ -234,6 +258,8 @@ Panel {
         color: rowRoot.foreground
         font.family: rowRoot.bar ? rowRoot.bar.fontFamily : Style.font.family
         font.pixelSize: Style.font.body
+        width: Style.space(18)
+        horizontalAlignment: Text.AlignHCenter
         anchors.verticalCenter: parent.verticalCenter
       }
 
