@@ -23,7 +23,7 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.dropbox/              # Panel Dropbox, en castellano
 ├── julss.emojis/               # Selector de emojis, en castellano
 ├── julss.forcequit/            # Copia en castellano de rogergdot.forcequit (MIT, Gregor Oppitz)
-├── julss.indicators/           # Indicadores (dictado, grabación, luz nocturna, webcam…), en castellano
+├── julss.indicators/           # Indicadores (dictado, grabación, luz nocturna, webcam, brillo del teclado…), en castellano
 ├── julss.keyboard-layout/      # Distribución de teclado (clon, sin textos propios)
 ├── julss.reminders/            # Recordatorios, en castellano
 ├── julss.speedtest/            # Test de velocidad, en castellano

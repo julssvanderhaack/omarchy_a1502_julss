@@ -14,8 +14,11 @@ BarWidget {
   property var indicatorActiveStates: ({})
   property bool indicatorAreaHovered: false
   property bool indicatorItemHovered: false
+  // Indicators that open a popup (KeyboardBacklight) hold the inactive block
+  // revealed while it is open, so their anchor does not fold away under it.
+  property int revealHolds: 0
   readonly property bool alwaysShowIndicators: setting("alwaysShow", false) === true
-  readonly property bool revealInactiveIndicators: alwaysShowIndicators || indicatorAreaHovered || indicatorItemHovered || (bar && bar.centerSectionRevealHeld === true && bar.centerHoverRevealSuppressed !== true)
+  readonly property bool revealInactiveIndicators: alwaysShowIndicators || revealHolds > 0 || indicatorAreaHovered || indicatorItemHovered || (bar && bar.centerSectionRevealHeld === true && bar.centerHoverRevealSuppressed !== true)
 
   signal refreshRequested()
 
@@ -58,6 +61,10 @@ BarWidget {
       if (id !== "") result.push(item)
     }
     return result
+  }
+
+  function holdReveal(held) {
+    revealHolds = Math.max(0, revealHolds + (held ? 1 : -1))
   }
 
   function setIndicatorAreaHovered(hovered) {
