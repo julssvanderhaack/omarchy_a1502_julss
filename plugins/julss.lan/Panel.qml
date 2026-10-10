@@ -26,6 +26,100 @@ Panel {
   // Nombres puestos por nosotros, por MAC: ~/.local/state/julss-lan/aliases.json
   property var aliases: ({})
   property string editingMac: ""
+
+  // Iconos elegidos por nosotros, por MAC: ~/.local/state/julss-lan/icons.json
+  // ({ mac: glyph }). El anterior de cada uno va en icons-previous.json para
+  // poder deshacer ("" = el icono automático).
+  property var customIcons: ({})
+  property var previousIcons: ({})
+  property string iconPickerMac: ""
+  readonly property var iconChoices: [
+    { glyph: "󰑩", label: "Router" },
+    { glyph: "󰌢", label: "Portátil" },
+    { glyph: "󰇄", label: "Ordenador" },
+    { glyph: "󰄜", label: "Móvil" },
+    { glyph: "󰓶", label: "Tablet" },
+    { glyph: "󰔂", label: "Televisión" },
+    { glyph: "󰓃", label: "Altavoz" },
+    { glyph: "󰊴", label: "Consola" },
+    { glyph: "󰐪", label: "Impresora" },
+    { glyph: "󰄀", label: "Cámara" },
+    { glyph: "󰌵", label: "Bombilla" },
+    { glyph: "󰚥", label: "Enchufe" },
+    { glyph: "󰖉", label: "Reloj" },
+    { glyph: "󰒋", label: "Servidor / NAS" },
+    { glyph: "󰖩", label: "Repetidor Wi-Fi" },
+    { glyph: "󰋋", label: "Auriculares" },
+    { glyph: "󰾰", label: "Otro" }
+  ]
+
+  property FileView iconFile: FileView {
+    path: Quickshell.env("HOME") + "/.local/state/julss-lan/icons.json"
+    watchChanges: true
+    atomicWrites: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try { root.customIcons = JSON.parse(text() || "{}") } catch (e) { root.customIcons = {} }
+    }
+    onLoadFailed: root.customIcons = {}
+  }
+
+  property FileView previousIconFile: FileView {
+    path: Quickshell.env("HOME") + "/.local/state/julss-lan/icons-previous.json"
+    watchChanges: true
+    atomicWrites: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      try { root.previousIcons = JSON.parse(text() || "{}") } catch (e) { root.previousIcons = {} }
+    }
+    onLoadFailed: root.previousIcons = {}
+  }
+
+  // El icono "por defecto" del selector: el que tenía antes del último cambio.
+  function previousIconFor(d) {
+    if (!d || !d.mac || !(d.mac in root.previousIcons)) return ""
+    return root.previousIcons[d.mac] || ""
+  }
+
+  function hasPreviousIcon(d) {
+    return !!d && !!d.mac && (d.mac in root.previousIcons)
+  }
+
+  function automaticIcon(d) {
+    if (d.gateway) return "󰑩"
+    if (d.self) return "󰌢"
+    var v = String(d.vendor || "").toLowerCase()
+    var n = String(root.displayName(d) || "").toLowerCase()
+    if (n.indexOf("tv") !== -1 || v.indexOf("samsung") !== -1 && n.indexOf("[tv]") !== -1) return "󰔂"
+    if (v.indexOf("amazon") !== -1) return "󰓃"
+    if (v.indexOf("aleatoria") !== -1) return "󰄜"
+    if (v.indexOf("print") !== -1 || v.indexOf("epson") !== -1 || v.indexOf("brother") !== -1 || v.indexOf("hp ") === 0) return "󰐪"
+    return "󰾰"
+  }
+
+  function toggleIconPicker(d) {
+    if (!d || !d.mac) return
+    root.editingMac = ""
+    root.iconPickerMac = root.iconPickerMac === d.mac ? "" : d.mac
+  }
+
+  function setIcon(mac, glyph) {
+    var current = root.customIcons[mac] || ""
+    if (current !== (glyph || "")) {
+      var prev = JSON.parse(JSON.stringify(root.previousIcons))
+      prev[mac] = current
+      root.previousIcons = prev
+      previousIconFile.setText(JSON.stringify(prev, null, 1) + "\n")
+    }
+    var next = JSON.parse(JSON.stringify(root.customIcons))
+    if (glyph) next[mac] = glyph
+    else delete next[mac]
+    root.customIcons = next
+    iconFile.setText(JSON.stringify(next, null, 1) + "\n")
+    root.iconPickerMac = ""
+  }
   property string toast: ""
 
   property FileView aliasFile: FileView {
@@ -47,6 +141,7 @@ Panel {
 
   function startRename(d) {
     if (!d || !d.mac) return
+    root.iconPickerMac = ""
     root.editingMac = d.mac
   }
 
@@ -121,15 +216,8 @@ Panel {
   }
 
   function deviceIcon(d) {
-    if (d.gateway) return "󰑩"
-    if (d.self) return "󰌢"
-    var v = String(d.vendor || "").toLowerCase()
-    var n = String(root.displayName(d) || "").toLowerCase()
-    if (n.indexOf("tv") !== -1 || v.indexOf("samsung") !== -1 && n.indexOf("[tv]") !== -1) return "󰔂"
-    if (v.indexOf("amazon") !== -1) return "󰓃"
-    if (v.indexOf("aleatoria") !== -1) return "󰄜"
-    if (v.indexOf("print") !== -1 || v.indexOf("epson") !== -1 || v.indexOf("brother") !== -1 || v.indexOf("hp ") === 0) return "󰐪"
-    return "󰾰"
+    if (d.mac && root.customIcons[d.mac]) return root.customIcons[d.mac]
+    return root.automaticIcon(d)
   }
 
   function detailFor(d, offline) {
@@ -300,12 +388,29 @@ Panel {
     property var device: ({})
     property bool offline: false
     readonly property bool editing: !!device.mac && root.editingMac === device.mac
+    readonly property bool pickingIcon: !!device.mac && root.iconPickerMac === device.mac
 
     width: parent.width
-    height: rowContent.implicitHeight + Style.space(10)
+    height: rowContent.implicitHeight + Style.space(10) + (pickingIcon ? iconPicker.implicitHeight + Style.space(8) : 0)
     foreground: root.barForeground
     hasCursor: mouse.containsMouse
     opacity: offline ? 0.55 : 1.0
+
+    MouseArea {
+      id: mouse
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: parent.top
+      height: rowContent.implicitHeight + Style.space(10)
+      enabled: !rowRoot.editing
+      hoverEnabled: true
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
+      cursorShape: Qt.PointingHandCursor
+      onClicked: function(mouseEvent) {
+        if (mouseEvent.button === Qt.RightButton) root.copy(rowRoot.device.ip)
+        else root.startRename(rowRoot.device)
+      }
+    }
 
     Row {
       id: rowContent
@@ -313,18 +418,33 @@ Panel {
       anchors.leftMargin: Style.space(8)
       anchors.right: parent.right
       anchors.rightMargin: Style.space(8)
-      anchors.verticalCenter: parent.verticalCenter
+      anchors.top: parent.top
+      anchors.topMargin: Style.space(5)
       spacing: Style.space(10)
 
       Text {
         textFormat: Text.PlainText
         text: root.deviceIcon(rowRoot.device)
-        color: rowRoot.foreground
+        color: iconMouse.containsMouse || rowRoot.pickingIcon ? Color.accent : rowRoot.foreground
         font.family: root.bar ? root.bar.fontFamily : Style.font.family
         font.pixelSize: Style.font.title
         width: Style.space(22)
         horizontalAlignment: Text.AlignHCenter
         anchors.verticalCenter: parent.verticalCenter
+
+        MouseArea {
+          id: iconMouse
+          anchors.fill: parent
+          anchors.margins: -Style.space(4)
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.toggleIconPicker(rowRoot.device)
+        }
+
+        PanelToolTip {
+          visible: iconMouse.containsMouse && !rowRoot.pickingIcon
+          text: "Cambiar icono"
+        }
       }
 
       Column {
@@ -390,22 +510,108 @@ Panel {
       }
     }
 
-    MouseArea {
-      id: mouse
-      anchors.fill: parent
-      enabled: !rowRoot.editing
-      hoverEnabled: true
-      acceptedButtons: Qt.LeftButton | Qt.RightButton
-      cursorShape: Qt.PointingHandCursor
-      onClicked: function(mouseEvent) {
-        if (mouseEvent.button === Qt.RightButton) root.copy(rowRoot.device.ip)
-        else root.startRename(rowRoot.device)
+    // Selector de icono: se despliega bajo la fila al pulsar su icono.
+    Flow {
+      id: iconPicker
+      visible: rowRoot.pickingIcon
+      anchors.left: parent.left
+      anchors.leftMargin: Style.space(8)
+      anchors.right: parent.right
+      anchors.rightMargin: Style.space(8)
+      anchors.top: rowContent.bottom
+      anchors.topMargin: Style.space(6)
+      spacing: Style.space(4)
+
+      Repeater {
+        model: root.iconChoices
+
+        Rectangle {
+          required property var modelData
+          readonly property bool chosen: root.customIcons[rowRoot.device.mac] === modelData.glyph
+          width: Style.space(30)
+          height: Style.space(30)
+          radius: Math.min(4, Style.cornerRadius)
+          color: pickMouse.containsMouse || chosen ? Style.hoverFillFor(rowRoot.foreground, Color.accent) : "transparent"
+          border.width: chosen ? 1 : 0
+          border.color: Color.accent
+
+          Text {
+            anchors.centerIn: parent
+            textFormat: Text.PlainText
+            text: modelData.glyph
+            color: rowRoot.foreground
+            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+            font.pixelSize: Style.font.title
+          }
+
+          MouseArea {
+            id: pickMouse
+            anchors.fill: parent
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.setIcon(rowRoot.device.mac, modelData.glyph)
+          }
+
+          PanelToolTip {
+            visible: pickMouse.containsMouse
+            text: modelData.label
+          }
+        }
+      }
+
+      // Por defecto: vuelve al icono que tenía antes del último cambio (o al
+      // automático si nunca se cambió).
+      Rectangle {
+        readonly property string glyph: root.hasPreviousIcon(rowRoot.device)
+          ? (root.previousIconFor(rowRoot.device) || root.automaticIcon(rowRoot.device))
+          : root.automaticIcon(rowRoot.device)
+        width: Style.space(44)
+        height: Style.space(30)
+        radius: Math.min(4, Style.cornerRadius)
+        color: resetMouse.containsMouse ? Style.hoverFillFor(rowRoot.foreground, Color.accent) : "transparent"
+        border.width: 1
+        border.color: Qt.darker(rowRoot.foreground, 1.8)
+
+        Row {
+          anchors.centerIn: parent
+          spacing: Style.space(3)
+
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
+            text: "↺"
+            color: Qt.darker(rowRoot.foreground, 1.3)
+            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+            font.pixelSize: Style.font.caption
+          }
+          Text {
+            anchors.verticalCenter: parent.verticalCenter
+            textFormat: Text.PlainText
+            text: parent.parent.glyph
+            color: rowRoot.foreground
+            font.family: root.bar ? root.bar.fontFamily : Style.font.family
+            font.pixelSize: Style.font.title
+          }
+        }
+
+        MouseArea {
+          id: resetMouse
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: root.setIcon(rowRoot.device.mac, root.previousIconFor(rowRoot.device))
+        }
+
+        PanelToolTip {
+          visible: resetMouse.containsMouse
+          text: root.hasPreviousIcon(rowRoot.device) ? "Volver al icono anterior" : "Icono automático"
+        }
       }
     }
 
     PanelToolTip {
       visible: mouse.containsMouse && !rowRoot.editing
-      text: "Clic: cambiar nombre  ·  Clic derecho: copiar IP"
+      text: "Clic: cambiar nombre  ·  Clic derecho: copiar IP  ·  Clic en el icono: cambiar icono"
     }
   }
 }
