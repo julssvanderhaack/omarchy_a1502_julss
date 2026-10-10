@@ -560,7 +560,8 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    centerOnBar: true
+    // julss: el widget está a la derecha; el panel sale bajo su icono.
+    centerOnBar: false
     focusTarget: keyCatcher
     // julss: ancho según contenido, las etiquetas en castellano son más largas.
     contentWidth: panel.fittedContentWidth(Math.max(Style.space(480), heroLeft.implicitWidth + weatherStats.implicitWidth + Style.space(16 + 20 + 64)))
