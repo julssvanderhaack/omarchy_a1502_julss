@@ -23,7 +23,7 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.dropbox/              # Panel Dropbox, en castellano
 ├── julss.emojis/               # Selector de emojis, en castellano
 ├── julss.forcequit/            # Copia en castellano de rogergdot.forcequit (MIT, Gregor Oppitz)
-├── julss.indicators/           # Indicadores (dictado, grabación, luz nocturna…), en castellano
+├── julss.indicators/           # Indicadores (dictado, grabación, luz nocturna, webcam…), en castellano
 ├── julss.keyboard-layout/      # Distribución de teclado (clon, sin textos propios)
 ├── julss.reminders/            # Recordatorios, en castellano
 ├── julss.speedtest/            # Test de velocidad, en castellano
@@ -41,7 +41,6 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.power/                # Panel Batería en castellano + salud (capacidad máx. / de diseño, %)
 ├── julss.network/              # Panel Wi-Fi/red en castellano + IP pública (vía api.ipify.org) + botón ↻ discreto para reiniciar la wifi
 ├── julss.places/               # Marcadores de Nautilus + expulsar unidades extraíbles
-├── julss.webcam/                # Botón en el centro de la barra: activa/desactiva el driver de la webcam FaceTime HD
 └── julss.workspaces/           # Escritorios sin huecos en la numeración; el activo como cuadrado relleno con el número
 patches/
 └── monitor-layout-es.patch     # Traducción al castellano del plugin de terceros Monitor Layout (ver abajo)
@@ -115,9 +114,10 @@ sin artefactos) la CPU no llega a sus C-states profundos, así que por defecto
 está **desactivado**: `blacklist-facetimehd.conf` evita que se cargue al
 arrancar y `facetimehd-sleep.sh` lo descarga antes de suspender.
 
-El botón `julss.webcam` del centro de la barra lo cambia (con `pkexec`, pide
-contraseña): icono oscuro = driver descargado, blanco = cargado,
-verde = alguna app está usando la cámara.
+El indicador *Webcam* de `julss.indicators` (centro de la barra) lo cambia con
+un clic (con `pkexec`, pide contraseña). Desactivada se oculta como los demás
+indicadores inactivos (aparece oscura al pasar el ratón); activada queda fija
+en blanco, y en verde mientras alguna app usa la cámara.
 
 ## Vídeo en Chromium (VA-API + H.264)
 

@@ -13,11 +13,9 @@
             "ScreenRecording",
             "Reminder",
             "NightLight",
-            "StayAwake"
+            "StayAwake",
+            "Webcam"
           ]
-        },
-        {
-          "id": "julss.webcam"
         },
         {
           "id": "julss.system-update"
