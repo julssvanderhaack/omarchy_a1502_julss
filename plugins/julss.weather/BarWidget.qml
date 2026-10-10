@@ -46,8 +46,20 @@ BarWidget {
     if (panelLoader.item) panelLoader.item.closeForPopoutSwitch()
   }
 
+  // julss: temperatura actual junto al icono (solo con la barra horizontal).
+  readonly property string tempText: panelLoader.item && panelLoader.item.reportTempNum
+    ? panelLoader.item.reportTempNum + "°" : ""
+  readonly property bool showTemp: !root.vertical && tempText !== ""
+
+  function handlePress(b) {
+    if (!root.bar) return
+    if (b === Qt.RightButton) root.bar.run("omarchy-notification-send \"$(omarchy-weather-status)\"")
+    else if (b === Qt.MiddleButton) root.refresh()
+    else root.togglePanel()
+  }
+
   visible: panelLoader.item && panelLoader.item.label !== ""
-  implicitWidth: button.implicitWidth
+  implicitWidth: button.implicitWidth + (showTemp ? tempButton.implicitWidth : 0)
   implicitHeight: button.implicitHeight
 
   onBarChanged: injectPanel()
@@ -66,18 +78,28 @@ BarWidget {
 
   BarIconButton {
     id: button
-    anchors.fill: parent
+    anchors.left: parent.left
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    width: implicitWidth
     bar: root.bar
     text: panelLoader.item ? panelLoader.item.label : ""
     slotSize: Style.bar.statusSlot
     // Tooltip suppressed because the panel is the detail view.
     tooltipText: ""
 
-    onPressed: function(b) {
-      if (!root.bar) return
-      if (b === Qt.RightButton) root.bar.run("omarchy-notification-send \"$(omarchy-weather-status)\"")
-      else if (b === Qt.MiddleButton) root.refresh()
-      else root.togglePanel()
-    }
+    onPressed: function(b) { root.handlePress(b) }
+  }
+
+  WidgetButton {
+    id: tempButton
+    visible: root.showTemp
+    anchors.left: button.right
+    anchors.top: parent.top
+    anchors.bottom: parent.bottom
+    bar: root.bar
+    text: root.tempText
+    horizontalMargin: 4
+    onPressed: function(b) { root.handlePress(b) }
   }
 }

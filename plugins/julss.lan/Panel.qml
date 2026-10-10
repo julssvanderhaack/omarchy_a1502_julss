@@ -205,28 +205,11 @@ Panel {
         RowLayout {
           width: parent.width
 
-          Column {
+          PanelSectionHeader {
             Layout.fillWidth: true
-            spacing: Style.space(2)
-
-            PanelSectionHeader {
-              text: "RED LOCAL"
-              foreground: root.barForeground
-              fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
-            }
-
-            Text {
-              textFormat: Text.PlainText
-              text: root.toast !== "" ? root.toast
-                : root.scanning ? "Escaneando la red…"
-                : root.scanError !== "" ? root.scanError
-                : root.scannedAt === 0 ? ""
-                : root.devices.length + (root.devices.length === 1 ? " dispositivo" : " dispositivos")
-                  + "  ·  " + root.network + "  ·  " + root.ago(root.scannedAt)
-              color: root.scanError !== "" ? (root.bar ? root.bar.urgent : Color.urgent) : Qt.darker(root.barForeground, 1.4)
-              font.family: root.bar ? root.bar.fontFamily : Style.font.family
-              font.pixelSize: Style.font.caption
-            }
+            text: "RED LOCAL"
+            foreground: root.barForeground
+            fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
           }
 
           Button {
@@ -242,6 +225,21 @@ Panel {
             tooltipText: "Volver a buscar dispositivos (R)"
             onClicked: root.scan()
           }
+        }
+
+        Text {
+          width: parent.width
+          wrapMode: Text.WordWrap
+          textFormat: Text.PlainText
+          text: root.toast !== "" ? root.toast
+            : root.scanning ? "Escaneando la red…"
+            : root.scanError !== "" ? root.scanError
+            : root.scannedAt === 0 ? ""
+            : root.devices.length + (root.devices.length === 1 ? " dispositivo" : " dispositivos")
+              + "  ·  " + root.network + "  ·  " + root.ago(root.scannedAt)
+          color: root.scanError !== "" ? (root.bar ? root.bar.urgent : Color.urgent) : Qt.darker(root.barForeground, 1.4)
+          font.family: root.bar ? root.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.caption
         }
 
         PanelSeparator {
