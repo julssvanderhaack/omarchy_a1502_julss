@@ -87,6 +87,14 @@ Panel {
     return d && d.isPresent && !UPower.onBattery && !root.batteryFlowIdle
   }
 
+  // Bar icon by charge: green 66–100 %, yellow 20–65 %, red below 20 %.
+  readonly property int batteryPercent: Math.round(root.batteryFraction * 100)
+  readonly property color batteryLevelColor: !root.batteryPresent
+    ? (root.bar ? root.bar.foreground : Color.foreground)
+    : root.batteryPercent >= 66 ? "#7cc77c"
+    : root.batteryPercent >= 20 ? "#e5c07b"
+    : "#e06c75"
+
   readonly property color batteryFillColor: {
     return root.bar ? root.bar.foreground : Color.foreground
   }
@@ -278,8 +286,9 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
+    foreground: root.batteryLevelColor
     text: root.showPercentage && !vertical
-      ? Math.round(root.batteryFraction * 100) + "% " + root.batteryIcon()
+      ? root.batteryPercent + "% " + root.batteryIcon()
       : root.batteryIcon()
     slotSize: Style.bar.iconSlot * (root.showPercentage && !vertical ? 2 : 1)
     tooltipText: ""

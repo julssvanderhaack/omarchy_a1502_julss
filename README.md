@@ -38,7 +38,7 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.notifications/        # Historial + "Borrar todas", no molestar y selector de tiempo en pantalla (3/5/8/15/30 s/∞)
 ├── julss.notifications-service/ # Clon del servicio omarchy.notifications que lee ~/.local/state/omarchy/notifications-duration
 ├── julss.monitor/              # Panel Pantalla en castellano + botón que abre Distribución de pantallas (Monitor Layout, flotante y centrado)
-├── julss.power/                # Panel Batería en castellano + salud (capacidad máx. / de diseño, %)
+├── julss.power/                # Panel Batería en castellano + salud (capacidad máx. / de diseño, %); icono verde ≥66 %, amarillo 20–65 %, rojo <20 %
 ├── julss.network/              # Panel Wi-Fi/red en castellano + IP pública (vía api.ipify.org) + botón ↻ discreto para reiniciar la wifi
 ├── julss.places/               # Marcadores de Nautilus + expulsar unidades extraíbles
 └── julss.workspaces/           # Escritorios sin huecos en la numeración; el activo como cuadrado relleno con el número
