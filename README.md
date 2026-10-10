@@ -32,16 +32,18 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.weather/              # Tiempo en castellano + ubicación automática sin Google (Wi-Fi recordada → BeaconDB/OSM → IP) o manual
 ├── julss.wifiqr/               # QR de la Wi-Fi, en castellano
 ├── julss.audio/                # Panel Sonido en castellano + sección APLICACIONES siempre visible (volumen y silencio por app)
-├── julss.clock/                # Reloj con segundos + calendario, en castellano (locale es_ES)
+├── julss.clock/                # Reloj con segundos + calendario, en castellano (locale es_ES); el panel se ensancha con meses largos
 ├── julss.lan/                  # Red local: escanea la LAN (ping + vecinos + mDNS/DNS/NetBIOS/UPnP) y lista dispositivos con nombre, IP y fabricante
 ├── julss.menu/                 # Menú/launcher propio
 ├── julss.notifications/        # Historial + "Borrar todas", no molestar y selector de tiempo en pantalla (3/5/8/15/30 s/∞)
 ├── julss.notifications-service/ # Clon del servicio omarchy.notifications que lee ~/.local/state/omarchy/notifications-duration
-├── julss.monitor/              # Panel Pantalla en castellano + botón que abre Monitor Layout (flotante y centrado)
+├── julss.monitor/              # Panel Pantalla en castellano + botón que abre Distribución de pantallas (Monitor Layout, flotante y centrado)
 ├── julss.power/                # Panel Batería en castellano + salud (capacidad máx. / de diseño, %)
-├── julss.network/              # Panel Wi-Fi/red en castellano + IP pública (vía api.ipify.org)
+├── julss.network/              # Panel Wi-Fi/red en castellano + IP pública (vía api.ipify.org) + botón ↻ discreto para reiniciar la wifi
 ├── julss.places/               # Marcadores de Nautilus + expulsar unidades extraíbles
 └── julss.workspaces/           # Escritorios sin huecos en la numeración; el activo como cuadrado relleno con el número
+patches/
+└── monitor-layout-es.patch     # Traducción al castellano del plugin de terceros Monitor Layout (ver abajo)
 system/                         # Ficheros de sistema (install.sh pregunta antes de instalarlos con sudo)
 ├── etc/modprobe.d/mbp12-woofers.conf                 # Carga el patch de HDA que reactiva los woofers
 ├── etc/systemd/system/thunderbolt-aspm.service      # Aplica thunderbolt-aspm al arrancar y al despertar
@@ -84,7 +86,13 @@ Al volver de la suspensión, `brcmfmac` recarga el firmware y a veces el primer
 intento de conexión caduca. `julss-wifi-resume-check` espera 30 s; si la wifi no
 ha vuelto (y está encendida y hay una red guardada al alcance), reinicia la radio
 y, si aun así no conecta, recarga el driver. Lo instala `install.sh` (parte de
-ficheros de sistema).
+ficheros de sistema). Si el escaneo no ve ninguna red, lo trata como wifi rota
+(es lo que pasa cuando el driver se queda sordo), no como «no hay redes».
+
+Si aun así no vuelve, el botón ↻ tenue del panel Wi-Fi (`julss.network`, junto
+al QR) lanza `pkexec julss-wifi-resume-check --force`: sin esperar ni
+comprobar, reinicia la radio y, si hace falta, recarga el driver. El resultado
+llega como notificación. A mano: `sudo julss-wifi-resume-check --force`.
 
 Registro: `journalctl -u julss-wifi-resume-check`.
 
@@ -154,25 +162,35 @@ Estos no viven en este repo — hay que volver a instalarlos:
 
 ```bash
 omarchy plugin add https://github.com/c4software/hyprland-alttab --enable   # vbrosseau.alttab (Alt+Tab switcher)
-omarchy plugin add <url-quickshell.spotify>
-omarchy plugin add <url-rogergdot.forcequit>
-omarchy plugin add <url-io.github.cjgarcia1229.monitor-layout>
-omarchy plugin add <url-dev.egoist.cpu-usage>
-omarchy plugin add <url-dev.egoist.memory-usage>
-omarchy plugin add <url-dev.egoist.network-throughput>
+omarchy plugin add https://github.com/stappmus/Omarchy-Spotify               # quickshell.spotify
+omarchy plugin add https://github.com/RogerGdot/omarchy-forcequit            # rogergdot.forcequit
+omarchy plugin add https://github.com/CJgarcia1229/omarchy-monitor-layout    # io.github.cjgarcia1229.monitor-layout
+omarchy plugin add https://github.com/egoist/omarchy-cpu-usage               # dev.egoist.cpu-usage
+omarchy plugin add https://github.com/egoist/omarchy-memory-usage            # dev.egoist.memory-usage
+omarchy plugin add https://github.com/egoist/omarchy-network-throughput      # dev.egoist.network-throughput
 ```
 
 Y los temas de terceros que tenía instalados:
 
 ```bash
-omarchy theme install <url-aetheria>
-omarchy theme install <url-black-sand>
-omarchy theme install <url-monokai>
-omarchy theme install <url-vulkanite>
+omarchy theme install https://github.com/JJDizz1L/aetheria
+omarchy theme install https://github.com/pkovzz/omarchy-black-sand-theme
+omarchy theme install https://github.com/bjarneo/omarchy-monokai-theme
+omarchy theme install https://github.com/kyerpotts/omarchy-vulkanite-theme
 ```
 
-(Rellena las URLs reales la próxima vez que las tengas a mano — no las tenía
-localmente al generar este README.)
+### Monitor Layout en castellano
+
+Tras instalarlo, aplicar la traducción y reinstalar su entrada de escritorio:
+
+```bash
+cd ~/.config/omarchy/plugins/io.github.cjgarcia1229.monitor-layout
+git apply ~/omarchy_a1502_julss/patches/monitor-layout-es.patch
+./install-app.sh
+```
+
+Si el plugin se ha actualizado y el parche ya no aplica, hay que retraducir:
+son solo textos de `monitor_layout.py`, `manifest.json` y el `.desktop.in`.
 
 ### Nota sobre el plugin Alt+Tab (`vbrosseau.alttab`)
 

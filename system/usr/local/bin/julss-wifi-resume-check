@@ -4,11 +4,16 @@
 # sometimes times out. NetworkManager usually recovers on its own retry; if it
 # hasn't after a grace period, bounce the radio, and as a last resort reload
 # the driver. Does nothing if wifi is switched off or no saved network is in range.
+#
+# --force (the wifi panel's restart button): skip the grace period and the
+# in-range check and go straight to bouncing the radio, then the driver.
 
 set -u
 
 IFACE=wlp3s0
 GRACE=30
+FORCE=0
+[[ ${1:-} == --force ]] && FORCE=1
 
 connected() {
   [[ $(nmcli -g GENERAL.STATE device show "$IFACE" 2>/dev/null) == 100* ]]
@@ -23,9 +28,12 @@ wait_connected() {
   return 1
 }
 
+# A scan that sees no networks at all is the broken-after-resume state itself
+# (the radio is up but deaf), not an empty neighbourhood, so it counts as yes.
 known_network_in_range() {
   local name ssid visible
   visible=$(nmcli -g SSID device wifi list ifname "$IFACE" --rescan yes 2>/dev/null)
+  [[ -z ${visible//[[:space:]]/} ]] && return 0
   while IFS=: read -r name type; do
     [[ $type == 802-11-wireless ]] || continue
     ssid=$(nmcli -g 802-11-wireless.ssid connection show "$name" 2>/dev/null)
@@ -34,22 +42,26 @@ known_network_in_range() {
   return 1
 }
 
-if wait_connected; then
-  echo "Wifi reconnected on its own"
-  exit 0
-fi
+if (( FORCE )); then
+  echo "Restart requested, restarting the wifi radio"
+else
+  if wait_connected; then
+    echo "Wifi reconnected on its own"
+    exit 0
+  fi
 
-if [[ $(nmcli radio wifi) != enabled ]]; then
-  echo "Wifi radio is off, nothing to do"
-  exit 0
-fi
+  if [[ $(nmcli radio wifi) != enabled ]]; then
+    echo "Wifi radio is off, nothing to do"
+    exit 0
+  fi
 
-if ! known_network_in_range; then
-  echo "No saved network in range, nothing to do"
-  exit 0
-fi
+  if ! known_network_in_range; then
+    echo "No saved network in range, nothing to do"
+    exit 0
+  fi
 
-echo "Not connected after ${GRACE}s, restarting the wifi radio"
+  echo "Not connected after ${GRACE}s, restarting the wifi radio"
+fi
 nmcli radio wifi off
 sleep 2
 nmcli radio wifi on

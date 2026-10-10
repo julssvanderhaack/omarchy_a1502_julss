@@ -677,6 +677,20 @@ Panel {
     bar.shell.summon("omarchy.speedtest", connection ? JSON.stringify({ connection: connection }) : "{}")
   }
 
+  // Hidden recovery for when the wifi does not come back after suspend:
+  // /usr/local/bin/julss-wifi-resume-check (the resume hook's own script)
+  // forced to bounce the radio and, failing that, reload brcmfmac. Needs
+  // root, hence pkexec; the outcome arrives as a notification because the
+  // panel closes first.
+  function restartWifi() {
+    root.close()
+    Quickshell.execDetached(["bash", "-c",
+      "notify-send -t 4000 'Wifi' 'Reiniciando la wifi…'; " +
+      "if pkexec /usr/local/bin/julss-wifi-resume-check --force; " +
+      "then notify-send 'Wifi' 'Wifi reconectada'; " +
+      "else notify-send -u critical 'Wifi' 'No se ha podido recuperar la wifi'; fi"])
+  }
+
   function dnsCommand(provider) {
     var command = "omarchy-dns"
     if (provider) command += " " + Util.shellQuote(provider)
@@ -1150,6 +1164,24 @@ Panel {
           spacing: Style.space(8)
           anchors.right: parent.right
           anchors.verticalCenter: parent.verticalCenter
+
+          // Deliberately faint: a rescue hatch, not an everyday control.
+          Button {
+            id: restartAction
+            property bool hot: false
+            visible: root.networkManagerAvailable
+            iconText: "󰑓"
+            tooltipText: "Reiniciar la wifi (si no vuelve tras suspender)"
+            foreground: root.bar.foreground
+            fontFamily: root.bar.fontFamily
+            iconSize: Style.font.body
+            horizontalPadding: Style.space(3)
+            verticalPadding: Style.space(2)
+            opacity: hot ? 1.0 : 0.3
+            Layout.alignment: Qt.AlignVCenter
+            onHovered: function(on) { hot = on }
+            onClicked: root.restartWifi()
+          }
 
           Button {
             id: qrAction

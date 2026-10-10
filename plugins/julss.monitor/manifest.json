@@ -4,7 +4,7 @@
   "name": "Pantalla",
   "version": "1.0.0",
   "author": "Omarchy",
-  "description": "Brillo, escala y acceso a Monitor Layout, en castellano",
+  "description": "Brillo, escala y acceso a Distribución de pantallas, en castellano",
   "kinds": [
     "bar-widget"
   ],
@@ -13,7 +13,7 @@
   },
   "barWidget": {
     "displayName": "Pantalla",
-    "description": "Brillo, escala y acceso a Monitor Layout, en castellano",
+    "description": "Brillo, escala y acceso a Distribución de pantallas, en castellano",
     "category": "System",
     "allowMultiple": false
   },

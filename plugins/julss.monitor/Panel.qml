@@ -837,7 +837,7 @@ Panel {
             width: parent.width
             iconText: "󰍺"
             text: "Distribución de pantallas"
-            tooltipText: "Abrir Monitor Layout"
+            tooltipText: "Abrir Distribución de pantallas"
             foreground: root.bar.foreground
             fontFamily: root.bar.fontFamily
             bordered: true

@@ -243,7 +243,9 @@ Panel {
     open: root.opened
     centerOnBar: true
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(560))
+    // Wide enough for the hero too: long months ("30 de septiembre") would
+    // otherwise run off the right edge at 560.
+    contentWidth: panel.fittedContentWidth(Math.max(Style.space(560), heroRow.width + Style.space(56)))
     contentHeight: panel.fittedContentHeight(calendarColumn.implicitHeight)
 
     PanelKeyCatcher {
