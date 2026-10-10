@@ -89,8 +89,6 @@ Panel {
   function open() {
     root.controller.show()
     root.nowTick = Date.now()
-    // Evita reescanear si el último escaneo es de hace menos de un minuto.
-    if (Date.now() / 1000 - root.scannedAt > 60) scan()
   }
 
   function scan() {
@@ -162,11 +160,13 @@ Panel {
     }
   }
 
-  // Refresca "hace X min" y reescanea cada 2 minutos mientras está abierto.
+  // Escanea al arrancar y luego cada hora, esté el panel abierto o no; el
+  // botón Escanear (o la tecla R) lo fuerza cuando quieras.
   Timer {
-    interval: 120000
-    running: root.opened
+    interval: 60 * 60 * 1000
+    running: true
     repeat: true
+    triggeredOnStart: true
     onTriggered: root.scan()
   }
   Timer {
