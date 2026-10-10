@@ -1,8 +1,10 @@
 import QtQuick
 import qs.Ui
 
-// Keyboard backlight. Never "active": it lives with the hideable icons and
-// shows on hover; a click drops a small panel with a brightness slider.
+// Keyboard: backlight and layout. Never "active": it lives with the hideable
+// icons and shows on hover; a click drops a panel with a brightness slider
+// and the kb_layout list. The icon goes from dark grey at 0 % to white at
+// 100 %, so instead of the stock dimming it is shown at full opacity.
 //
 // The indicator is instantiated once per block (inactive and active) and
 // per bar orientation; only the inactive copy on screen carries the panel.
@@ -11,7 +13,16 @@ BarIndicator {
 
   active: false
   inactiveText: "󰌌"
-  inactiveTooltipText: "Brillo del teclado"
+  inactiveTooltipText: kbdPanel ? "Teclado — brillo " + kbdPanel.percent + " %" : "Teclado"
+
+  readonly property real level: kbdPanel ? Math.max(0, Math.min(100, kbdPanel.percent)) / 100 : 1
+  foreground: Qt.rgba(0.3 + 0.7 * level, 0.3 + 0.7 * level, 0.3 + 0.7 * level, 1)
+
+  // BarIndicator dims revealed inactive icons to 0.45; the colour already
+  // carries the level here.
+  function syncIndicatorOpacity() {
+    root.opacity = !belongsInBlock ? 0 : (effectiveActive || inactiveRevealed ? 1 : 0)
+  }
 
   readonly property var kbdPanel: panelLoader.item
   property bool holdingReveal: false
@@ -27,6 +38,7 @@ BarIndicator {
     if (!kbdPanel) return
     kbdPanel.bar = root.bar
     kbdPanel.anchorItem = root
+    kbdPanel.watched = Qt.binding(function() { return root.inactiveRevealed })
   }
 
   onPressed: function() { if (kbdPanel) kbdPanel.toggle() }
