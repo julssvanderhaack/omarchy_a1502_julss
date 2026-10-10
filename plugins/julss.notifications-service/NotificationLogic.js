@@ -98,6 +98,47 @@ function sanitizeBody(body, app, appIcon) {
     .replace(/^\s*(?:https?:\/\/|www\.)?(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:\/\S*)?\s+/i, "")
 }
 
+// Chromium web-app notifications (PWAs and plain tabs alike) put the site's
+// origin as a leading link in the body and leave the summary as just the chat
+// or page title, so "Lista de la compra" alone gives no hint it came from
+// WhatsApp. Name the site from that origin and prefix the summary with it.
+var WEB_APP_NAMES = {
+  whatsapp: "WhatsApp", telegram: "Telegram", discord: "Discord", slack: "Slack",
+  google: "Google", youtube: "YouTube", github: "GitHub", gitlab: "GitLab",
+  linkedin: "LinkedIn", instagram: "Instagram", facebook: "Facebook",
+  messenger: "Messenger", x: "X", twitter: "X", outlook: "Outlook",
+  live: "Outlook", office: "Office", teams: "Teams", microsoft: "Microsoft",
+  notion: "Notion", spotify: "Spotify", twitch: "Twitch", reddit: "Reddit"
+}
+
+function webAppHost(body, app, appIcon) {
+  if (!isChromiumDerived(app, appIcon)) return ""
+  var text = String(body || "")
+  var m = /^\s*<a\b[^>]*>\s*(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})/i.exec(text) ||
+          /^\s*(?:https?:\/\/)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?::\d+)?(?:\/\S*)?\s/i.exec(text)
+  return m ? m[1].toLowerCase() : ""
+}
+
+function webAppName(body, app, appIcon) {
+  var host = webAppHost(body, app, appIcon)
+  if (!host) return ""
+  var parts = host.split(".")
+  var key = parts.length >= 2 ? parts[parts.length - 2] : parts[0]
+  // Two-level public suffixes such as co.uk / com.es.
+  if (parts.length >= 3 && /^(co|com|org|net|gob|gov|ac)$/.test(key)) key = parts[parts.length - 3]
+  if (WEB_APP_NAMES[key]) return WEB_APP_NAMES[key]
+  return key.charAt(0).toUpperCase() + key.slice(1)
+}
+
+function displaySummary(summary, body, app, appIcon) {
+  var text = String(summary || "")
+  var name = webAppName(body, app, appIcon)
+  if (!name) return text
+  if (!text) return name
+  if (text.toLowerCase().indexOf(name.toLowerCase()) === 0) return text
+  return name + ": " + text
+}
+
 function summaryStartsWithGlyph(summary) {
   var text = String(summary || "").replace(/^\s+/, "")
   if (!text) return false

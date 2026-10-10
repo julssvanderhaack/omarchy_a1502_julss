@@ -61,7 +61,7 @@ BarWidget {
   function refresh() {
     if (historyProc.running) return
     historyProc.command = ["bash", "-c",
-      "awk 1 \"$1\"/*.json 2>/dev/null || true", "--", root.historyDir]
+      "awk '{ n = FILENAME; sub(/.*\\//, \"\", n); print n \"\\t\" $0 }' \"$1\"/*.json 2>/dev/null || true", "--", root.historyDir]
     historyProc.running = true
   }
 
@@ -85,6 +85,17 @@ BarWidget {
   function parseDuration(raw) {
     var n = parseInt(String(raw || "").trim(), 10)
     root.durationSeconds = isFinite(n) && n >= 0 ? n : -1
+  }
+
+  // Borra una sola entrada: su fichero en history/ y las imágenes copiadas
+  // con el mismo nombre base (así lo hace también el propio servicio).
+  function removeEntry(file) {
+    var name = String(file || "")
+    if (!/^[0-9A-Za-z._-]+\.json$/.test(name)) return
+    root.entries = root.entries.filter(function(e) { return e.file !== name })
+    Quickshell.execDetached(["bash", "-c",
+      "rm -f -- \"$1/$3\" \"$2/${3%.json}\"-*", "--",
+      root.historyDir, root.popupDir + "images", name])
   }
 
   function clearAll() {

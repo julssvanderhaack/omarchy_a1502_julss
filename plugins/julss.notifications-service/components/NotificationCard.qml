@@ -36,7 +36,11 @@ BorderSurface {
   signal cardClicked()
   // Prefer per-notification media/avatar data, then fall back to the app icon.
   // The `check` flag avoids Qt's missing-texture placeholder for unknown names.
-  readonly property string smallIconSource: image.length > 0 ? image : iconSource(appIcon)
+  readonly property string smallIconSource: image.length > 0 ? image : (webAppIcon.length > 0 ? webAppIcon : iconSource(appIcon))
+  // Web-app notifications carry the browser's icon; prefer the site's own
+  // theme icon (e.g. hicolor "whatsapp") when one is installed.
+  readonly property string webAppName: NotificationLogic.webAppName(body, app, appIcon)
+  readonly property string webAppIcon: webAppName.length > 0 ? Quickshell.iconPath(webAppName.toLowerCase(), true) : ""
   readonly property bool hasGlyph: glyph.length > 0
   readonly property bool compactGlyph: NotificationLogic.shouldRenderCompactGlyph(glyph, smallIconSource, singleLineToast)
   readonly property bool hasSmallIcon: smallIconSource.length > 0
@@ -166,7 +170,7 @@ BorderSurface {
           textFormat: Text.PlainText
           Layout.fillWidth: true
           visible: root.summary.length > 0
-          text: root.summary
+          text: NotificationLogic.displaySummary(root.summary, root.body, root.app, root.appIcon)
           font.family: "Liberation Sans"
           color: Color.notifications.text
           font.pixelSize: Style.font.title

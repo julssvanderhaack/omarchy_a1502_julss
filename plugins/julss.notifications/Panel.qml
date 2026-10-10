@@ -36,6 +36,17 @@ Panel {
     if (root.hostWidget) root.hostWidget.setDuration(seconds)
   }
 
+  // Clic en una notificación: enfocar la ventana de la app o lanzarla.
+  function openApp(entry) {
+    Quickshell.execDetached(["bash", Qt.resolvedUrl("open-app.sh").toString().replace(/^file:\/\//, ""),
+      entry.app || "", entry.appIcon || "", entry.webHost || "", entry.execArgv || ""])
+    root.close()
+  }
+
+  function removeEntry(file) {
+    if (root.hostWidget) root.hostWidget.removeEntry(file)
+  }
+
   function clearAll() {
     if (root.hostWidget) root.hostWidget.clearAll()
   }
@@ -186,6 +197,7 @@ Panel {
             bar: root.bar
             entryApp: modelData.app
             entryAppIcon: modelData.appIcon
+            entryWebApp: modelData.webApp
             entrySummary: modelData.summary
             entryBody: modelData.body
             entryImage: modelData.image
@@ -193,6 +205,8 @@ Panel {
             entryTimestamp: modelData.timestamp
             nowTick: root.nowTick
             resolveIcon: root.iconSource
+            onActivated: root.openApp(modelData)
+            onRemoveRequested: root.removeEntry(modelData.file)
           }
         }
       }
@@ -205,6 +219,7 @@ Panel {
     property var bar: null
     property string entryApp: ""
     property string entryAppIcon: ""
+    property string entryWebApp: ""
     property string entrySummary: ""
     property string entryBody: ""
     property string entryImage: ""
@@ -213,14 +228,41 @@ Panel {
     property double nowTick: Date.now()
     property var resolveIcon: null
 
+    signal activated()
+    signal removeRequested()
+
     readonly property string foreground: rowRoot.bar ? rowRoot.bar.barForeground : Color.foreground
     readonly property string iconSrc: rowRoot.entryImage.length > 0
       ? rowRoot.entryImage
-      : (rowRoot.resolveIcon ? rowRoot.resolveIcon(rowRoot.entryAppIcon) : "")
+      : (rowRoot.webAppIcon.length > 0
+        ? rowRoot.webAppIcon
+        : (rowRoot.resolveIcon ? rowRoot.resolveIcon(rowRoot.entryAppIcon) : ""))
+    // Web-app notifications carry the browser's icon; prefer the site's own
+    // theme icon (e.g. hicolor "whatsapp") when one is installed.
+    readonly property string webAppIcon: rowRoot.entryWebApp.length > 0
+      ? Quickshell.iconPath(rowRoot.entryWebApp.toLowerCase(), true)
+      : ""
     readonly property bool hasIcon: rowRoot.iconSrc.length > 0
     readonly property bool hasGlyph: rowRoot.entryGlyph.length > 0
 
     height: rowContent.implicitHeight + Style.space(10)
+
+    Rectangle {
+      anchors.fill: parent
+      anchors.leftMargin: -Style.space(6)
+      anchors.rightMargin: -Style.space(6)
+      radius: Style.space(4)
+      color: rowRoot.foreground
+      opacity: rowMouse.containsMouse ? 0.08 : 0
+    }
+
+    MouseArea {
+      id: rowMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: rowRoot.activated()
+    }
 
     Row {
       id: rowContent
@@ -256,6 +298,7 @@ Panel {
 
       Column {
         width: parent.width - Style.space(38) - timeLabel.implicitWidth - Style.space(10)
+          - trashButton.width - Style.space(10)
         spacing: Style.space(2)
         anchors.verticalCenter: parent.verticalCenter
 
@@ -293,6 +336,34 @@ Panel {
         color: Qt.darker(rowRoot.foreground, 1.5)
         font.family: rowRoot.bar ? rowRoot.bar.fontFamily : Style.font.family
         font.pixelSize: Style.font.caption
+      }
+
+      // Papelera: borra solo esta notificación de la lista. Va encima del
+      // MouseArea de la fila, así que el clic no abre la app.
+      Item {
+        id: trashButton
+        width: Style.space(22)
+        height: Style.space(22)
+        anchors.verticalCenter: parent.verticalCenter
+
+        Text {
+          textFormat: Text.PlainText
+          anchors.centerIn: parent
+          text: "󰆴"
+          color: trashMouse.containsMouse
+            ? (rowRoot.bar ? rowRoot.bar.urgent : Color.urgent)
+            : Qt.darker(rowRoot.foreground, 1.5)
+          font.family: rowRoot.bar ? rowRoot.bar.fontFamily : Style.font.family
+          font.pixelSize: Style.font.body
+        }
+
+        MouseArea {
+          id: trashMouse
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.PointingHandCursor
+          onClicked: rowRoot.removeRequested()
+        }
       }
     }
   }
