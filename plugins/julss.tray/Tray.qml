@@ -24,7 +24,7 @@ BarWidget {
   readonly property var drawerItems: bucket("drawer")
   readonly property var allItems: bucket("all")
   readonly property int drawerCount: drawerItems.length
-  readonly property int trayItemExtent: Style.bar.iconSlot
+  readonly property int trayItemExtent: Style.bar.iconSlot - Style.space(4)  // julss: más juntos
   readonly property int trayItemGap: 0
   readonly property int trayJoinGap: 0
   readonly property int drawerExtent: drawerCount > 0 ? drawerCount * trayItemExtent + (drawerCount - 1) * trayItemGap : 0

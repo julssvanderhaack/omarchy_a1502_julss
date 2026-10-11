@@ -1,0 +1,8 @@
+#!/bin/bash
+# Usado solo por julss-agent-crash: si JULSS_AGENT está puesto, omarchy-agent
+# lanza ese agente en lugar del predeterminado; si no, el comando de Omarchy.
+if (($# == 0)) && [[ -n ${JULSS_AGENT:-} ]]; then
+  echo "$JULSS_AGENT"
+  exit 0
+fi
+exec "${OMARCHY_PATH:-/usr/share/omarchy}/bin/omarchy-default-agent" "$@"

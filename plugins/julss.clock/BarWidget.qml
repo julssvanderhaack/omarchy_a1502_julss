@@ -149,7 +149,7 @@ BarWidget {
     labelVisible: !root.vertical
     hasVisualContent: root.vertical ? root.verticalLines.length > 0 : text !== ""
     fixedHeight: root.vertical ? root.verticalLines.length * Style.bar.iconSlot : -1
-    horizontalMargin: 8.75
+    horizontalMargin: 6  // julss: algo más junto (Omarchy: 8.75)
     verticalPadding: 8.75
 
     onPressed: function(b) {

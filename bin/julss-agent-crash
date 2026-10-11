@@ -1,0 +1,76 @@
+#!/bin/bash
+# Diagnosticar un proceso caído (clic en el aviso "Process crashed:") con un
+# agente que tenga tokens: primero el agente por defecto; si está en alerta de
+# tokens (como el icono rojo del widget de agentes: algún límite >= 90 % o
+# saldo de prepago <= 10 %), otro agente instalado que no lo esté; si todos lo
+# están, el de por defecto igualmente. Luego delega en omarchy-agent-crash, que
+# arma el mensaje con la skill diagnose-crash.
+#   julss-agent-crash <pid> [comm] [exe] [signal]
+#   julss-agent-crash --which   (solo dice qué agente elegiría y por qué)
+
+usage_dir="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/agents/usage"
+default=$(omarchy-default-agent)
+
+# Estado de tokens de un agente según su fichero de uso:
+#   0 = con tokens, 1 = en alerta, 2 = sin datos
+token_state() {
+  local f="$usage_dir/$1.json"
+  [[ -r $f ]] || return 2
+  jq -e '.ready != false' "$f" >/dev/null 2>&1 || return 2
+  if jq -e '
+      ([.limits[]? | .percent | numbers] | max // 0) >= 0.9
+      or ((.balance.funded // 0) > 0 and (.balance.remaining // 0) / .balance.funded <= 0.1)
+    ' "$f" >/dev/null 2>&1; then
+    return 1
+  fi
+  return 0
+}
+
+max_percent() {
+  jq -r '[.limits[]? | .percent | numbers] | max // 0' "$usage_dir/$1.json" 2>/dev/null
+}
+
+installed() { [[ -n $1 ]] && command -v "$1" >/dev/null 2>&1; }
+
+choose() {
+  reason=""
+  if installed "$default"; then
+    token_state "$default"
+    case $? in
+      0) chosen=$default; reason="por defecto, con tokens"; return ;;
+      2) chosen=$default; reason="por defecto, sin datos de uso"; return ;;
+    esac
+  fi
+  # Otro agente instalado con datos de uso y sin alerta, el menos gastado.
+  local best="" best_pct=2 id pct
+  for f in "$usage_dir"/*.json; do
+    [[ -e $f ]] || continue
+    id=$(basename "$f" .json)
+    [[ $id == "$default" ]] && continue
+    installed "$id" || continue
+    token_state "$id" || continue
+    pct=$(max_percent "$id")
+    if awk -v a="$pct" -v b="$best_pct" 'BEGIN{exit !(a < b)}'; then
+      best=$id; best_pct=$pct
+    fi
+  done
+  if [[ -n $best ]]; then
+    chosen=$best; reason="$default en alerta de tokens; $best al $(awk -v p="$best_pct" 'BEGIN{printf "%d", p*100}') %"
+    return
+  fi
+  chosen=$default; reason="todos en alerta o sin alternativa; se usa el de por defecto"
+}
+
+choose
+
+if [[ ${1:-} == "--which" ]]; then
+  echo "$chosen ($reason)"
+  exit 0
+fi
+
+if [[ -n $chosen && $chosen != "$default" ]]; then
+  notify-send -h "string:omarchy-glyph:$(printf "\U000F06A9")" -t 5000 "Diagnóstico con $chosen" "$reason"
+  export JULSS_AGENT=$chosen
+  export PATH="$HOME/.local/share/julss/agent-shim:$PATH"
+fi
+exec omarchy-agent-crash "$@"

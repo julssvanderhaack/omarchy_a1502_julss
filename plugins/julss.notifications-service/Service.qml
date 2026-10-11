@@ -393,6 +393,9 @@ Item {
     // outlives the shell, which installer toasts depend on: they restart it.
     var argv = NotificationLogic.parseExecArgv(entry ? entry.execArgv : "")
     if (argv) {
+      // julss: los avisos de proceso caído se diagnostican con un agente que
+      // tenga tokens (julss-agent-crash elige; si no está, el de Omarchy).
+      if (argv[0] === "omarchy-agent-crash") argv[0] = Quickshell.env("HOME") + "/.local/bin/julss-agent-crash"
       Util.execArgv(argv)
       dismissPopup(index)
       return

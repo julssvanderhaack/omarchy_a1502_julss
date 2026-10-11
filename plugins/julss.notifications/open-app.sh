@@ -9,6 +9,8 @@ app="$1" app_icon="$2" host="$3" exec_json="$4"
 
 if [[ -n $exec_json && $exec_json != "[]" ]]; then
   mapfile -t argv < <(jq -r '.[]' <<<"$exec_json" 2>/dev/null)
+  # Proceso caído: diagnosticar con un agente que tenga tokens.
+  [[ ${argv[0]:-} == omarchy-agent-crash && -x $HOME/.local/bin/julss-agent-crash ]] && argv[0]=$HOME/.local/bin/julss-agent-crash
   ((${#argv[@]})) && exec setsid "${argv[@]}"
 fi
 

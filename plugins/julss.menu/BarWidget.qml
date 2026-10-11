@@ -39,8 +39,9 @@ BarWidget {
 
     onPressed: function(button) {
       if (!root.bar) return
-      // Clic derecho: btop (como Super+Ctrl+T; si ya está abierto, lo enfoca).
-      if (button === Qt.RightButton) root.bar.run("omarchy-launch-or-focus-tui btop")
+      // Clic derecho: fastfetch en la ventana "About" de Omarchy (btop ya se
+      // abre desde el monitor julss.sysmon).
+      if (button === Qt.RightButton) root.bar.run("omarchy-launch-about")
       else root.bar.run("omarchy-shell shell toggle omarchy.menu '{\"menu\":\"root\"}'")
     }
   }

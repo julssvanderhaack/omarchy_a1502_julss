@@ -63,6 +63,9 @@ fi
 [[ -d $HOME/Dropbox ]] && gio set "$HOME/Dropbox" metadata::custom-icon-name folder-dropbox 2>/dev/null
 [[ -d $HOME/Projects ]] && gio set "$HOME/Projects" metadata::custom-icon-name folder-code 2>/dev/null
 
+# julss-agent-crash: diagnosticar procesos caídos con un agente con tokens
+backup_and_copy "$REPO_DIR/share/agent-shim/omarchy-default-agent" "$HOME/.local/share/julss/agent-shim/omarchy-default-agent"
+
 # Chromium flags (VA-API video decode)
 backup_and_copy "$REPO_DIR/chromium/chromium-flags.conf" "$CONFIG_DIR/chromium-flags.conf"
 

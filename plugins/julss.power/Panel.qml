@@ -149,6 +149,7 @@ Panel {
     if (!batteryPresent) return
 
     if (!batteryProc.running) batteryProc.running = true
+    batteryTempFile.reload()
     if (!profilesProc.running) profilesProc.running = true
     if (!systemProc.running) systemProc.running = true
   }
@@ -298,7 +299,7 @@ Panel {
     // With the percentage shown, only the icon takes the level colour: the
     // two are drawn as separate texts instead of the single glyph string.
     iconComponent: (root.showPercentage && !vertical) || root.batteryCritical ? percentAndIcon : null
-    slotSize: Style.bar.iconSlot * (root.showPercentage && !vertical ? 2 : 1)
+    slotSize: Style.bar.iconSlot * (root.showPercentage && !vertical ? 2 : 1) - Style.space(4)  // julss: más junto
     tooltipText: ""
     onPressed: function(b) {
       if (!root.batteryPresent) return
@@ -355,6 +356,22 @@ Panel {
         }
       }
     }
+  }
+
+  // julss: temperatura de la batería (décimas de °C en sysfs). Solo se lee
+  // con el panel abierto, junto al resto de datos.
+  property string batteryTempC: ""
+
+  FileView {
+    id: batteryTempFile
+    path: "/sys/class/power_supply/BAT0/temp"
+    blockLoading: true
+    printErrors: false
+    onLoaded: {
+      var tenths = parseInt(text(), 10)
+      root.batteryTempC = isFinite(tenths) ? (tenths / 10).toFixed(1).replace(".", ",") + " °C" : ""
+    }
+    onLoadFailed: root.batteryTempC = ""
   }
 
   KeyboardPanel {
@@ -503,6 +520,11 @@ Panel {
             spacing: Style.spacing.labelGap
             InfoPair { label: "Capacidad máx."; value: root.batteryInfo.full || root.batteryInfo.size || "" }
             InfoPair { label: "Ciclos de carga"; value: root.batteryInfo.cycles || "—" }
+            InfoPair {
+              visible: root.batteryTempC !== ""
+              label: "Temperatura"
+              value: root.batteryTempC
+            }
           }
 
           Column {

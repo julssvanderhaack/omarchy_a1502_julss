@@ -628,6 +628,9 @@ Panel {
   }
 
   BarIconButton {
+    // julss: ranura más estrecha que la de Omarchy para juntar los iconos
+    // de la derecha (la flecha de la bandeja chocaba con los indicadores).
+    slotSize: Style.bar.iconSlot - Style.space(4)
     id: button
     anchors.fill: parent
     bar: root.bar

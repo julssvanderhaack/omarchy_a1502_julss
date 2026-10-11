@@ -685,10 +685,11 @@ Panel {
   function restartWifi() {
     root.close()
     Quickshell.execDetached(["bash", "-c",
-      "notify-send -t 4000 'Wifi' 'Reiniciando la wifi…'; " +
+      // El hint omarchy-glyph pone el icono de wifi (Nerd Font) en el aviso.
+      "notify-send -h string:omarchy-glyph:󰖩 -t 4000 'Wifi' 'Reiniciando la wifi…'; " +
       "if pkexec /usr/local/bin/julss-wifi-resume-check --force; " +
-      "then notify-send 'Wifi' 'Wifi reconectada'; " +
-      "else notify-send -u critical 'Wifi' 'No se ha podido recuperar la wifi'; fi"])
+      "then notify-send -h string:omarchy-glyph:󰖩 'Wifi' 'Wifi reconectada'; " +
+      "else notify-send -h string:omarchy-glyph:󰖪 -u critical 'Wifi' 'No se ha podido recuperar la wifi'; fi"])
   }
 
   function dnsCommand(provider) {
@@ -1011,6 +1012,9 @@ Panel {
   }
 
   BarIconButton {
+    // julss: ranura más estrecha que la de Omarchy para juntar los iconos
+    // de la derecha (la flecha de la bandeja chocaba con los indicadores).
+    slotSize: Style.bar.iconSlot - Style.space(4)
     id: button
     anchors.fill: parent
     bar: root.bar

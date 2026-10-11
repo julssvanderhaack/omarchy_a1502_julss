@@ -84,7 +84,7 @@ BarWidget {
     width: implicitWidth
     bar: root.bar
     text: panelLoader.item ? panelLoader.item.label : ""
-    slotSize: Style.bar.statusSlot
+    slotSize: Style.bar.statusSlot - Style.space(4)  // julss: icono más cerca de la cifra
     // Tooltip suppressed because the panel is the detail view.
     tooltipText: ""
 
@@ -102,7 +102,7 @@ BarWidget {
     foreground: panelLoader.item
       ? panelLoader.item.tempColor(panelLoader.item.reportTempNum, root.bar ? root.bar.barForeground : Color.foreground)
       : (root.bar ? root.bar.barForeground : Color.foreground)
-    horizontalMargin: 4
+    horizontalMargin: 2
     onPressed: function(b) { root.handlePress(b) }
   }
 }

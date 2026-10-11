@@ -25,7 +25,7 @@
 
 -- Logitech MX Keys examples:
 hl.unbind("SUPER + SHIFT + S")
-o.bind("SUPER + SHIFT + S", "Captura de pantalla", "omarchy-capture-screenshot")
+o.bind("SUPER + SHIFT + S", "Captura de area de pantalla", "omarchy-capture-screenshot")
 hl.unbind("SUPER + SHIFT + E")
 
 o.bind("SUPER + SHIFT + E","Explorador de archivos","nautilus")
@@ -42,6 +42,10 @@ o.bind("SUPER + M", "Telegram", "Telegram")
 o.bind("SUPER + B","Chromium Browser","chromium")
 hl.unbind("SUPER + Z")
 o.bind("SUPER + Z", "Spotify", "spotify")
+hl.unbind("SUPER + SHIFT + C")
+-- Captura de toda la pantalla sin seleccionar área (guarda, copia al
+-- portapapeles y avisa con opción de editar, como la tecla Imprimir).
+o.bind("SUPER + SHIFT + C", "Captura de pantalla completa", "omarchy-capture-screenshot fullscreen")
 
 --o.bind("SUPER + E","
 -- o.bind("SUPER + SHIFT + S", nil, "omarchy-capture-screenshot")
