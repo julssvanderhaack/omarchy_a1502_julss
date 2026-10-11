@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import Quickshell.Hyprland
 import qs.Ui
 import qs.Commons
 
@@ -38,8 +39,22 @@ BarWidget {
   property bool popupOpen: false
 
   function close() { popupOpen = false }
-  // Ancho máximo del texto; si no cabe, se desplaza en bucle.
-  property real maxLabelWidth: Style.space(220)
+  // Último espacio visible en julss.workspaces (siempre 1–5, más hasta el
+  // mayor que exista, como mucho 10).
+  readonly property int lastWorkspace: {
+    var last = 5
+    var values = Hyprland.workspaces.values
+    for (var i = 0; i < values.length; i++) {
+      var id = values[i].id
+      if (id > last && id <= 10) last = id
+    }
+    return last
+  }
+
+  // Ancho máximo del texto; si no cabe, se desplaza en bucle. Cada número de
+  // espacio extra (6–10) ocupa Style.space(20) + 1 de separación, así que se
+  // le resta para no montarse sobre los indicadores ocultos del centro.
+  property real maxLabelWidth: Style.space(380) - (lastWorkspace - 5) * Style.space(21)
 
   function focusPlayingApplication() {
     if (!activePlayer) return

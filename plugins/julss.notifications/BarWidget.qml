@@ -203,13 +203,15 @@ BarWidget {
     width: Style.space(15)
     height: Style.space(15)
     radius: width / 2
-    color: root.bar ? root.bar.urgent : Color.urgent
+    // Rojo oscuro, y dentro de los límites del botón: antes asomaba 2 px por
+    // arriba y por la derecha (borde de la pantalla) y el círculo se cortaba.
+    color: "#B02A2A"
     border.color: root.bar ? root.bar.background : Color.background
     border.width: Math.max(1, Style.space(1))
     anchors.right: button.right
     anchors.top: button.top
-    anchors.rightMargin: -Style.space(2)
-    anchors.topMargin: -Style.space(2)
+    anchors.rightMargin: Style.space(1)
+    anchors.topMargin: Style.space(1)
 
     Text {
       textFormat: Text.PlainText
