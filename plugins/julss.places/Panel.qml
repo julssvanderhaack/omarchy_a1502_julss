@@ -55,6 +55,8 @@ Panel {
     "desktop": "user-desktop-symbolic",
     "templates": "folder-templates-symbolic",
     "public": "folder-publicshare-symbolic",
+    "dropbox": "dropbox-symbolic",
+    "code": "code-context-symbolic",
     "folder": "folder-symbolic"
   })
 

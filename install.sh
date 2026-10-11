@@ -59,6 +59,10 @@ if omarchy pkg add papirus-icon-theme; then
   gsettings set org.gnome.desktop.interface icon-theme Papirus-Dark 2>/dev/null || true
 fi
 
+# Iconos propios para Dropbox y Proyectos en Nautilus (vista de archivos)
+[[ -d $HOME/Dropbox ]] && gio set "$HOME/Dropbox" metadata::custom-icon-name folder-dropbox 2>/dev/null
+[[ -d $HOME/Projects ]] && gio set "$HOME/Projects" metadata::custom-icon-name folder-code 2>/dev/null
+
 # Chromium flags (VA-API video decode)
 backup_and_copy "$REPO_DIR/chromium/chromium-flags.conf" "$CONFIG_DIR/chromium-flags.conf"
 
