@@ -293,7 +293,7 @@ Panel {
     bar: root.bar
     foreground: root.batteryLevelColor
     text: root.showPercentage && !vertical
-      ? root.batteryPercent + "% " + root.batteryIcon()
+      ? root.batteryIcon() + " " + root.batteryPercent + "%"
       : root.batteryIcon()
     // With the percentage shown, only the icon takes the level colour: the
     // two are drawn as separate texts instead of the single glyph string.
@@ -314,16 +314,7 @@ Panel {
       Row {
         anchors.centerIn: parent
 
-        Text {
-          visible: root.showPercentage && !button.vertical
-          anchors.verticalCenter: parent.verticalCenter
-          textFormat: Text.PlainText
-          text: root.batteryPercent + "% "
-          color: root.bar ? root.bar.foreground : Color.foreground
-          font.family: button.fontFamily
-          font.pixelSize: button.fontSize
-        }
-
+        // julss: icono primero y el porcentaje a su derecha.
         Item {
           anchors.verticalCenter: parent.verticalCenter
           width: root.batteryCritical ? criticalSquare.width + Style.space(4) : batteryGlyph.implicitWidth
@@ -351,6 +342,16 @@ Panel {
             font.family: button.fontFamily
             font.pixelSize: button.fontSize
           }
+        }
+
+        Text {
+          visible: root.showPercentage && !button.vertical
+          anchors.verticalCenter: parent.verticalCenter
+          textFormat: Text.PlainText
+          text: " " + root.batteryPercent + "%"
+          color: root.bar ? root.bar.foreground : Color.foreground
+          font.family: button.fontFamily
+          font.pixelSize: button.fontSize
         }
       }
     }

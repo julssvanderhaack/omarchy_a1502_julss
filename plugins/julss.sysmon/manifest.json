@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.sysmon",
+  "name": "Monitor",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Uso de CPU y RAM en la barra, leyendo /proc sin lanzar procesos",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Monitor CPU/RAM",
+    "description": "Porcentaje de CPU y RAM; clic para abrir btop",
+    "category": "System",
+    "allowMultiple": false
+  }
+}
