@@ -241,7 +241,8 @@ Panel {
     owner: root.barIdentity
     bar: root.bar
     open: root.opened
-    centerOnBar: true
+    // julss: anclado bajo la fecha/hora en vez de centrado en la barra.
+    centerOnBar: false
     focusTarget: keyCatcher
     // Wide enough for the hero too: long months ("30 de septiembre") would
     // otherwise run off the right edge at 560.

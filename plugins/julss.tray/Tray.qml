@@ -764,6 +764,15 @@ BarWidget {
     }
   }
 
+  // Colores de marca para iconos simbólicos concretos (si no, el del bar).
+  readonly property var brandColors: ({ "telegram": "#2AABEE" })
+  function brandColorFor(icon) {
+    var name = String(icon || "").toLowerCase()
+    for (var key in root.brandColors)
+      if (name.indexOf(key) !== -1) return root.brandColors[key]
+    return ""
+  }
+
   // Renders a tray icon, recoloring symbolic icons to the bar foreground so
   // they stay visible on any theme (a raw symbolic icon keeps its baked-in
   // fill and disappears against a matching background).
@@ -771,6 +780,7 @@ BarWidget {
     id: trayIconRoot
     required property var icon
     readonly property bool symbolic: root.iconIsSymbolic(icon)
+    readonly property string brandColor: root.brandColorFor(icon)
 
     Image {
       id: trayIconImage
@@ -791,7 +801,7 @@ BarWidget {
       source: trayIconImage
       visible: trayIconRoot.symbolic
       colorization: 1.0
-      colorizationColor: root.foreground
+      colorizationColor: trayIconRoot.brandColor !== "" ? trayIconRoot.brandColor : root.foreground
     }
   }
 

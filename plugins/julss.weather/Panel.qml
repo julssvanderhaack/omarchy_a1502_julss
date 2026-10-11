@@ -380,6 +380,18 @@ Panel {
   }
 
   // Bare degree value (no unit letter), used in the forecast row.
+  // julss: color según la temperatura (en °C): <15 celeste (frío), 15–30 el
+  // color normal, 30–36 amarillo, >36 rojo. `fallback` para el tramo normal.
+  function tempColor(value, fallback) {
+    var n = parseFloat(String(value || "").replace(",", "."))
+    if (!isFinite(n)) return fallback
+    if (useImperial) n = (n - 32) * 5 / 9
+    if (n < 15) return "#4FC3F7"
+    if (n > 36) return "#EF5350"
+    if (n >= 30) return "#FFD54F"
+    return fallback
+  }
+
   function bareTempForDay(day, kind) {
     return Model.bareTempForDay(day, kind, useImperial)
   }
@@ -622,7 +634,7 @@ Panel {
               id: tempBig
               textFormat: Text.PlainText
               text: root.reportTempNum || "—"
-              color: root.bar.foreground
+              color: root.tempColor(root.reportTempNum, root.bar.foreground)
               font.family: root.bar.fontFamily
               // Hero temperature read-out; deliberately oversized, outside
               // the Style.font.* scale.
@@ -973,14 +985,14 @@ Panel {
                   Text {
                     textFormat: Text.PlainText
                     text: root.bareTempForDay(modelData, "max")
-                    color: root.bar.foreground
+                    color: root.tempColor(text, root.bar.foreground)
                     font.family: root.bar.fontFamily
                     font.pixelSize: Style.font.body
                   }
                   Text {
                     textFormat: Text.PlainText
                     text: root.bareTempForDay(modelData, "min")
-                    color: Qt.darker(root.bar.foreground, 1.5)
+                    color: root.tempColor(text, Qt.darker(root.bar.foreground, 1.5))
                     font.family: root.bar.fontFamily
                     font.pixelSize: Style.font.body
                   }

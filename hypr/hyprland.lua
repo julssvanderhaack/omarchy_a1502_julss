@@ -32,3 +32,8 @@ require("default.hypr.toggles")
 o.window("org.omarchy.MonitorLayout", { float = true })
 o.window("org.omarchy.MonitorLayout", { center = true })
 o.window("org.omarchy.MonitorLayout", { size = { 900, 620 } })
+
+-- Cursor Bibata Modern Ice (blanco, borde negro fino),
+-- instalado en ~/.local/share/icons. Tamaño: el 24 de Omarchy.
+hl.env("XCURSOR_THEME", "Bibata-Modern-Ice")
+hl.env("HYPRCURSOR_THEME", "Bibata-Modern-Ice")

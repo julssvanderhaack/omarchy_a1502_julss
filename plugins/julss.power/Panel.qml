@@ -95,6 +95,11 @@ Panel {
     : root.batteryPercent >= 20 ? "#e5c07b"
     : "#e06c75"
 
+  // julss: por debajo del 10 % el icono va en negativo sobre un cuadrado rojo,
+  // como el número del espacio de trabajo activo.
+  readonly property color barBackground: root.bar ? root.bar.background : Color.background
+  readonly property bool batteryCritical: root.batteryPresent && root.batteryPercent < 10
+
   readonly property color batteryFillColor: {
     return root.bar ? root.bar.foreground : Color.foreground
   }
@@ -292,7 +297,7 @@ Panel {
       : root.batteryIcon()
     // With the percentage shown, only the icon takes the level colour: the
     // two are drawn as separate texts instead of the single glyph string.
-    iconComponent: root.showPercentage && !vertical ? percentAndIcon : null
+    iconComponent: (root.showPercentage && !vertical) || root.batteryCritical ? percentAndIcon : null
     slotSize: Style.bar.iconSlot * (root.showPercentage && !vertical ? 2 : 1)
     tooltipText: ""
     onPressed: function(b) {
@@ -310,6 +315,7 @@ Panel {
         anchors.centerIn: parent
 
         Text {
+          visible: root.showPercentage && !button.vertical
           anchors.verticalCenter: parent.verticalCenter
           textFormat: Text.PlainText
           text: root.batteryPercent + "% "
@@ -318,13 +324,33 @@ Panel {
           font.pixelSize: button.fontSize
         }
 
-        Text {
+        Item {
           anchors.verticalCenter: parent.verticalCenter
-          textFormat: Text.PlainText
-          text: root.batteryIcon()
-          color: root.batteryLevelColor
-          font.family: button.fontFamily
-          font.pixelSize: button.fontSize
+          width: root.batteryCritical ? criticalSquare.width + Style.space(4) : batteryGlyph.implicitWidth
+          height: batteryGlyph.implicitHeight
+
+          Rectangle {
+            id: criticalSquare
+            visible: root.batteryCritical
+            anchors.centerIn: parent
+            // Mismo tamaño que el cuadrado del espacio activo (julss.workspaces).
+            width: Style.space(16)
+            height: width
+            radius: Style.space(4)
+            color: "#e06c75"
+          }
+
+          Text {
+            id: batteryGlyph
+            anchors.centerIn: parent
+            textFormat: Text.PlainText
+            text: root.batteryIcon()
+            color: root.batteryCritical
+              ? Qt.rgba(root.barBackground.r, root.barBackground.g, root.barBackground.b, 1)
+              : root.batteryLevelColor
+            font.family: button.fontFamily
+            font.pixelSize: button.fontSize
+          }
         }
       }
     }
@@ -475,7 +501,6 @@ Panel {
             width: (parent.width - parent.spacing) / 2
             spacing: Style.spacing.labelGap
             InfoPair { label: "Capacidad máx."; value: root.batteryInfo.full || root.batteryInfo.size || "" }
-            InfoPair { label: "Capacidad diseño"; value: root.batteryInfo.design || "—" }
             InfoPair { label: "Ciclos de carga"; value: root.batteryInfo.cycles || "—" }
           }
 

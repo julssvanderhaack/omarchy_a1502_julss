@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -41,6 +42,34 @@ Panel {
     "work": "󰃖",
     "folder": "󰉋"
   })
+
+  // Iconos simbólicos del tema, los mismos que la barra lateral de Nautilus.
+  // Si el tema no tiene alguno, se usa el glifo de folderIcons.
+  readonly property var folderIconNames: ({
+    "home": "user-home-symbolic",
+    "downloads": "folder-download-symbolic",
+    "documents": "folder-documents-symbolic",
+    "music": "folder-music-symbolic",
+    "pictures": "folder-pictures-symbolic",
+    "videos": "folder-videos-symbolic",
+    "desktop": "user-desktop-symbolic",
+    "templates": "folder-templates-symbolic",
+    "public": "folder-publicshare-symbolic",
+    "folder": "folder-symbolic"
+  })
+
+  function themeIcon(name) {
+    return name ? Quickshell.iconPath(name, true) : ""
+  }
+
+  function folderIconSource(kind) {
+    return root.themeIcon(root.folderIconNames[kind] || root.folderIconNames["folder"])
+  }
+
+  function deviceIconSource(fstype) {
+    var optical = /^(iso9660|udf)$/i.test(String(fstype || ""))
+    return root.themeIcon(optical ? "media-optical-symbolic" : "drive-removable-media-symbolic")
+  }
 
   function folderIcon(kind) {
     return root.folderIcons[kind] || root.folderIcons["folder"]
@@ -157,6 +186,7 @@ Panel {
           label: root.homePlace.label || "Inicio"
           detail: ""
           iconText: root.folderIcon("home")
+          iconSource: root.folderIconSource("home")
           bar: root.bar
           onActivated: root.openPath(root.homePlace.path)
         }
@@ -169,6 +199,7 @@ Panel {
             label: modelData.label
             detail: ""
             iconText: root.folderIcon(modelData.kind)
+            iconSource: root.folderIconSource(modelData.kind)
             bar: root.bar
             onActivated: root.openPath(modelData.path)
           }
@@ -210,6 +241,7 @@ Panel {
           delegate: MediaRow {
             required property var modelData
             label: modelData.label
+            iconSource: root.deviceIconSource(modelData.fstype)
             detail: (modelData.fstype || "") + (modelData.size ? "  ·  " + modelData.size : "")
             bar: root.bar
             busy: root.ejectingParent === modelData.parent
@@ -236,6 +268,7 @@ Panel {
     property string label: ""
     property string detail: ""
     property string iconText: ""
+    property string iconSource: ""
     property var bar: null
     signal activated()
 
@@ -252,15 +285,16 @@ Panel {
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(10)
 
-      Text {
-        textFormat: Text.PlainText
-        text: rowRoot.iconText
-        color: rowRoot.foreground
-        font.family: rowRoot.bar ? rowRoot.bar.fontFamily : Style.font.family
-        font.pixelSize: Style.font.body
+      ThemedIcon {
         width: Style.space(18)
-        horizontalAlignment: Text.AlignHCenter
+        height: Style.space(18)
         anchors.verticalCenter: parent.verticalCenter
+        source: rowRoot.iconSource
+        iconSize: Style.space(16)
+        glyph: rowRoot.iconText
+        color: rowRoot.foreground
+        fontFamily: rowRoot.bar ? rowRoot.bar.fontFamily : Style.font.family
+        fontSize: Style.font.body
       }
 
       Text {
@@ -288,6 +322,7 @@ Panel {
     id: mediaRowRoot
     property string label: ""
     property string detail: ""
+    property string iconSource: ""
     property var bar: null
     property bool busy: false
     signal activated()
@@ -314,15 +349,18 @@ Panel {
       anchors.verticalCenter: parent.verticalCenter
       implicitHeight: Math.max(deviceIcon.implicitHeight, info.implicitHeight, ejectButton.implicitHeight)
 
-      Text {
+      ThemedIcon {
         id: deviceIcon
-        textFormat: Text.PlainText
-        text: ""
-        color: mediaRowRoot.foreground
-        font.family: mediaRowRoot.bar ? mediaRowRoot.bar.fontFamily : Style.font.family
-        font.pixelSize: Style.font.heading
+        width: Style.space(22)
+        height: Style.space(22)
         anchors.left: parent.left
         anchors.verticalCenter: parent.verticalCenter
+        source: mediaRowRoot.iconSource
+        iconSize: Style.space(20)
+        glyph: ""
+        color: mediaRowRoot.foreground
+        fontFamily: mediaRowRoot.bar ? mediaRowRoot.bar.fontFamily : Style.font.family
+        fontSize: Style.font.heading
       }
 
       Column {
@@ -366,6 +404,51 @@ Panel {
         enabled: !mediaRowRoot.busy
         onClicked: mediaRowRoot.ejectRequested()
       }
+    }
+  }
+
+  // Icono simbólico del tema teñido con el color del texto (como hace GTK con
+  // los -symbolic); si el tema no lo tiene, el glifo Nerd Font.
+  component ThemedIcon: Item {
+    id: themed
+    property string source: ""
+    property real iconSize: 16
+    property string glyph: ""
+    property color color: "white"
+    property string fontFamily: ""
+    property real fontSize: 14
+
+    Image {
+      id: themedImage
+      anchors.centerIn: parent
+      width: themed.iconSize
+      height: themed.iconSize
+      source: themed.source
+      sourceSize.width: Math.round(themed.iconSize * Screen.devicePixelRatio)
+      sourceSize.height: Math.round(themed.iconSize * Screen.devicePixelRatio)
+      fillMode: Image.PreserveAspectFit
+      smooth: true
+      visible: false
+      layer.enabled: true
+    }
+
+    MultiEffect {
+      anchors.fill: themedImage
+      source: themedImage
+      visible: themedImage.status === Image.Ready
+      colorization: 1.0
+      colorizationColor: themed.color
+      brightness: 1.0
+    }
+
+    Text {
+      anchors.centerIn: parent
+      visible: themedImage.status !== Image.Ready
+      textFormat: Text.PlainText
+      text: themed.glyph
+      color: themed.color
+      font.family: themed.fontFamily
+      font.pixelSize: themed.fontSize
     }
   }
 }

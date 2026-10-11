@@ -1,0 +1,159 @@
+#!/bin/bash
+# Recolorea GTK3/GTK4 (libadwaita) con la paleta del tema actual de Omarchy.
+# Escribe ~/.config/gtk-{3,4}.0/gtk.css a partir de
+# ~/.local/state/omarchy/current/theme/colors.toml. Lo llama el hook
+# theme-set, así que sigue al tema al cambiarlo. Para quitarlo: borrar
+# esos dos gtk.css (y el hook julss-gtk-colors).
+
+colors="$HOME/.local/state/omarchy/current/theme/colors.toml"
+[[ -f $colors ]] || exit 0
+
+get() { # clave [respaldo]
+  local v
+  v=$(sed -nE "s/^$1[[:space:]]*=[[:space:]]*\"(#[0-9A-Fa-f]{6})\".*/\1/p" "$colors" | head -n1)
+  echo "${v:-$2}"
+}
+
+bg=$(get background "#1e1e1e")
+fg=$(get foreground "#ffffff")
+dark=$(get dark_background "$bg")
+darker=$(get darker_background "$dark")
+light=$(get lighter_background "$bg")
+accent=$(get accent "$(get blue "#3584e4")")
+muted=$(get muted "$(get dark_foreground "$fg")")
+red=$(get red "#e01b24")
+green=$(get green "#2ec27e")
+yellow=$(get yellow "#e5a50a")
+
+marker="/* julss-gtk-theme-colors: generado, se sobrescribe al cambiar de tema */"
+
+css() {
+  cat <<CSS
+$marker
+@define-color accent_color $accent;
+@define-color accent_bg_color $accent;
+@define-color accent_fg_color $darker;
+
+@define-color window_bg_color $bg;
+@define-color window_fg_color $fg;
+@define-color view_bg_color $bg;
+@define-color view_fg_color $fg;
+@define-color headerbar_bg_color $light;
+@define-color headerbar_fg_color $fg;
+@define-color headerbar_backdrop_color $bg;
+@define-color headerbar_shade_color rgba(0, 0, 0, 0.36);
+@define-color sidebar_bg_color $dark;
+@define-color sidebar_fg_color $fg;
+@define-color sidebar_backdrop_color $darker;
+@define-color secondary_sidebar_bg_color $dark;
+@define-color secondary_sidebar_fg_color $fg;
+@define-color card_bg_color $light;
+@define-color card_fg_color $fg;
+@define-color dialog_bg_color $light;
+@define-color dialog_fg_color $fg;
+@define-color popover_bg_color $light;
+@define-color popover_fg_color $fg;
+@define-color thumbnail_bg_color $light;
+@define-color thumbnail_fg_color $fg;
+
+@define-color destructive_color $red;
+@define-color destructive_bg_color $red;
+@define-color success_color $green;
+@define-color success_bg_color $green;
+@define-color warning_color $yellow;
+@define-color warning_bg_color $yellow;
+@define-color error_color $red;
+@define-color error_bg_color $red;
+
+/* GTK3 (Adwaita clásico) */
+@define-color theme_bg_color $bg;
+@define-color theme_fg_color $fg;
+@define-color theme_base_color $bg;
+@define-color theme_text_color $fg;
+@define-color theme_selected_bg_color $accent;
+@define-color theme_selected_fg_color $darker;
+@define-color insensitive_fg_color $muted;
+@define-color borders $light;
+CSS
+}
+
+# Solo GTK4: GTK3 no entiende :root ni las variables.
+gtk4_extra() {
+  cat <<CSS
+
+/* libadwaita >= 1.6: variables CSS (las @define-color no llegan a todo). */
+:root {
+  --accent-color: $accent;
+  --accent-bg-color: $accent;
+  --accent-fg-color: $darker;
+  --window-bg-color: $bg;
+  --window-fg-color: $fg;
+  --view-bg-color: $bg;
+  --view-fg-color: $fg;
+  --headerbar-bg-color: $light;
+  --headerbar-fg-color: $fg;
+  --headerbar-backdrop-color: $bg;
+  --sidebar-bg-color: $dark;
+  --sidebar-fg-color: $fg;
+  --sidebar-backdrop-color: $darker;
+  --secondary-sidebar-bg-color: $dark;
+  --secondary-sidebar-fg-color: $fg;
+  --card-bg-color: $light;
+  --card-fg-color: $fg;
+  --dialog-bg-color: $light;
+  --dialog-fg-color: $fg;
+  --popover-bg-color: $light;
+  --popover-fg-color: $fg;
+  --thumbnail-bg-color: $light;
+  --thumbnail-fg-color: $fg;
+  --destructive-color: $red;
+  --destructive-bg-color: $red;
+  --success-color: $green;
+  --success-bg-color: $green;
+  --warning-color: $yellow;
+  --warning-bg-color: $yellow;
+  --error-color: $red;
+  --error-bg-color: $red;
+}
+CSS
+}
+
+# GTK3 con Adwaita-dark apenas respeta @define-color (CSS ya compilado), así
+# que ahí se repintan explícitamente las piezas principales.
+gtk3_extra() {
+  cat <<CSS
+
+window, .background, dialog { background-color: $bg; color: $fg; }
+headerbar, .titlebar, headerbar:backdrop, .titlebar:backdrop {
+  background: $light; border-color: $darker; box-shadow: none; color: $fg;
+}
+.view, textview text, iconview, treeview.view, list, row { background-color: $bg; color: $fg; }
+.sidebar, placessidebar, stacksidebar { background-color: $dark; }
+button, button.flat:hover, combobox button, spinbutton button {
+  background-image: none; background-color: $light; border-color: $darker; color: $fg; box-shadow: none; text-shadow: none;
+}
+button:hover { background-color: shade($light, 1.35); }
+button:active, button:checked { background-color: shade($light, 1.7); }
+button.flat { background-color: transparent; border-color: transparent; }
+button.suggested-action { background-color: $accent; border-color: $accent; color: $darker; }
+button.suggested-action:hover { background-color: shade($accent, 1.08); }
+button.destructive-action { background-color: $red; border-color: $red; color: $darker; }
+entry, spinbutton, searchbar entry { background-color: $dark; border-color: $darker; color: $fg; box-shadow: none; }
+entry:focus { border-color: $accent; }
+menu, .menu, .context-menu, popover, popover.background, tooltip, tooltip.background { background-color: $light; color: $fg; }
+*:selected, selection, row:selected, treeview.view:selected { background-color: $accent; color: $darker; }
+scale highlight, progressbar progress, switch:checked { background-color: $accent; border-color: $accent; }
+check:checked, radio:checked { background-color: $accent; border-color: $accent; color: $darker; }
+CSS
+}
+
+for v in 3.0 4.0; do
+  dir="$HOME/.config/gtk-$v"
+  file="$dir/gtk.css"
+  mkdir -p "$dir"
+  # No pisar un gtk.css hecho a mano: se guarda una copia una vez.
+  if [[ -f $file ]] && ! head -n1 "$file" | grep -qF "$marker"; then
+    cp "$file" "$file.bak.$(date +%s)"
+  fi
+  { css; if [[ $v == 3.0 ]]; then gtk3_extra; else gtk4_extra; fi; } >"$file"
+done

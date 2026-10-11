@@ -341,6 +341,39 @@ Panel {
     bar: root.bar
     text: "󱚣"
     active: root.alarming
+    // julss: en la barra, el logo del agente seleccionado (assets/<id>.svg,
+    // p. ej. Claude en su naranja); si no hay logo, el glifo de siempre.
+    iconComponent: Component {
+      Item {
+        Image {
+          id: barMarkImage
+          anchors.centerIn: parent
+          width: parent.width * 0.8
+          height: parent.height * 0.8
+          // Con el límite casi agotado, assets/<id>-alarm.svg (el logo en rojo vivo).
+          property bool alarmFailed: false
+          source: !root.provider ? ""
+            : Qt.resolvedUrl("assets/" + root.provider.providerId
+                + (root.alarming && !alarmFailed ? "-alarm" : "") + ".svg")
+          onStatusChanged: if (status === Image.Error && root.alarming && !alarmFailed)
+            Qt.callLater(function() { barMarkImage.alarmFailed = true })
+          sourceSize.width: width * 2
+          sourceSize.height: height * 2
+          fillMode: Image.PreserveAspectFit
+          smooth: true
+        }
+
+        Text {
+          textFormat: Text.PlainText
+          anchors.centerIn: parent
+          visible: barMarkImage.status !== Image.Ready
+          text: button.text
+          color: button.active ? button.activeColor : button.foreground
+          font.family: button.fontFamily
+          font.pixelSize: button.fontSize
+        }
+      }
+    }
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton) root.launchAgent()
       else if (buttonCode === Qt.MiddleButton) root.selectProvider(root.providerIndex + 1)

@@ -99,6 +99,9 @@ BarWidget {
     anchors.bottom: parent.bottom
     bar: root.bar
     text: root.tempText
+    foreground: panelLoader.item
+      ? panelLoader.item.tempColor(panelLoader.item.reportTempNum, root.bar ? root.bar.barForeground : Color.foreground)
+      : (root.bar ? root.bar.barForeground : Color.foreground)
     horizontalMargin: 4
     onPressed: function(b) { root.handlePress(b) }
   }

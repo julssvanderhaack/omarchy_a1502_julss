@@ -14,6 +14,8 @@ BarWidget {
     bar: root.bar
     text: "\ue900"
     fontFamily: "omarchy"
+    // Verde del logo de Omarchy (/usr/share/omarchy/icon.png).
+    foreground: "#9ECE6A"
     horizontalMargin: 7.5
     onPressed: function(button) {
       if (!root.bar) return

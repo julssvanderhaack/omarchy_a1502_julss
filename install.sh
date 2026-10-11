@@ -33,6 +33,32 @@ for f in "$REPO_DIR"/bin/*; do
   backup_and_copy "$f" "$HOME/.local/bin/$(basename "$f")"
 done
 
+# Hook theme-set: recolorea GTK con la paleta del tema (bin/julss-gtk-theme-colors)
+backup_and_copy "$REPO_DIR/omarchy/hooks/theme-set.d/julss-gtk-colors" "$CONFIG_DIR/omarchy/hooks/theme-set.d/julss-gtk-colors"
+
+# Cursor Bibata Modern Ice en ~/.local/share/icons (hypr/hyprland.lua lo usa)
+if [[ ! -d $HOME/.local/share/icons/Bibata-Modern-Ice ]]; then
+  tmp=$(mktemp -d)
+  if curl -fsSL -o "$tmp/c.tar.xz" https://github.com/ful1e5/Bibata_Cursor/releases/download/v2.0.7/Bibata-Modern-Ice.tar.xz &&
+    tar xJf "$tmp/c.tar.xz" -C "$tmp"; then
+    mkdir -p "$HOME/.local/share/icons"
+    cp -r "$tmp/Bibata-Modern-Ice" "$HOME/.local/share/icons/"
+  fi
+  rm -rf "$tmp"
+fi
+gsettings set org.gnome.desktop.interface cursor-theme Bibata-Modern-Ice 2>/dev/null || true
+"$HOME/.local/bin/julss-gtk-theme-colors" 2>/dev/null || true
+
+# Iconos Papirus-Dark con carpetas cian (el hook julss-icons lo mantiene al cambiar de tema)
+backup_and_copy "$REPO_DIR/omarchy/hooks/theme-set.d/julss-icons" "$CONFIG_DIR/omarchy/hooks/theme-set.d/julss-icons"
+if omarchy pkg add papirus-icon-theme; then
+  tmp=$(mktemp -d)
+  curl -fsSL -o "$tmp/papirus-folders" https://raw.githubusercontent.com/PapirusDevelopmentTeam/papirus-folders/v1.14.0/papirus-folders &&
+    bash "$tmp/papirus-folders" -C cyan --theme Papirus-Dark
+  rm -rf "$tmp"
+  gsettings set org.gnome.desktop.interface icon-theme Papirus-Dark 2>/dev/null || true
+fi
+
 # Chromium flags (VA-API video decode)
 backup_and_copy "$REPO_DIR/chromium/chromium-flags.conf" "$CONFIG_DIR/chromium-flags.conf"
 

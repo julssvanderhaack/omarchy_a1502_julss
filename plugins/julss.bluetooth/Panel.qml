@@ -101,6 +101,7 @@ Panel {
   // sits above the device sections so the adapter can be toggled by keyboard
   // even when it is off and no device rows exist.
   readonly property bool headerHasCursor: cursorActive && focusSection === "header"
+  readonly property color bluetoothBlue: "#0082FC"
   readonly property string toggleHint: root.adapter && root.adapter.enabled ? "Apagar Bluetooth" : "Encender Bluetooth"
 
   readonly property color hoverFill: bar
@@ -653,6 +654,11 @@ Panel {
     anchors.fill: parent
     bar: root.bar
     text: root.icon
+    // julss: azul Bluetooth encendido; apagado, atenuado como los demás
+    // iconos desactivados de la barra (mismo Qt.darker 1.55 que Dropbox).
+    foreground: root.adapter && root.adapter.enabled
+      ? root.bluetoothBlue
+      : Qt.darker(root.bar ? root.bar.barForeground : Color.foreground, 1.55)
     onPressed: function(b) {
       if (b === Qt.RightButton) root.toggleBluetooth()
       else root.toggle()
@@ -702,7 +708,7 @@ Panel {
             anchors.left: parent.left
             anchors.verticalCenter: parent.verticalCenter
             text: root.icon
-            color: root.bar.foreground
+            color: root.adapter && root.adapter.enabled ? root.bluetoothBlue : root.bar.foreground
             font.family: root.bar.fontFamily
             font.pixelSize: Style.font.display
             opacity: root.adapter && root.adapter.enabled ? 1.0 : 0.5

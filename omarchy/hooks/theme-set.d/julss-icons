@@ -1,0 +1,6 @@
+#!/bin/bash
+# Mantener Papirus-Dark como tema de iconos aunque el tema de Omarchy traiga
+# su propio icons.theme (Omarchy lo aplica justo antes de los hooks).
+if [[ -d $HOME/.local/share/icons/Papirus-Dark || -d /usr/share/icons/Papirus-Dark ]]; then
+  gsettings set org.gnome.desktop.interface icon-theme "Papirus-Dark"
+fi

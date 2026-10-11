@@ -31,6 +31,9 @@
         },
         {
           "id": "julss.workspaces"
+        },
+        {
+          "id": "julss.media"
         }
       ],
       "right": [
@@ -66,9 +69,9 @@
           "showPercentage": true
         },
         {
-          "id": "julss.clock",
           "format": "ddd d MMM HH:mm:ss",
           "formatAlt": "d 'de' MMMM 'S'ww yyyy",
+          "id": "julss.clock",
           "verticalFormat": "HH\n—\nmm"
         },
         {
@@ -80,8 +83,26 @@
       ]
     },
     "position": "top",
-    "transparent": true
+    "transparent": false
   },
+  "cloneSourceRestores": [
+    "julss.notifications-service",
+    "julss.speedtest",
+    "julss.wifiqr",
+    "julss.emojis",
+    "julss.clipboard",
+    "julss.reminders",
+    "julss.media"
+  ],
+  "disabledPlugins": [
+    "omarchy.notifications",
+    "omarchy.speedtest",
+    "omarchy.wifiqr",
+    "omarchy.emojis",
+    "omarchy.clipboard",
+    "omarchy.reminders",
+    "omarchy.media"
+  ],
   "idle": {
     "lock": 300,
     "screensaver": 150
@@ -112,21 +133,5 @@
       "id": "julss.reminders"
     }
   ],
-  "version": 1,
-  "disabledPlugins": [
-    "omarchy.notifications",
-    "omarchy.speedtest",
-    "omarchy.wifiqr",
-    "omarchy.emojis",
-    "omarchy.clipboard",
-    "omarchy.reminders"
-  ],
-  "cloneSourceRestores": [
-    "julss.notifications-service",
-    "julss.speedtest",
-    "julss.wifiqr",
-    "julss.emojis",
-    "julss.clipboard",
-    "julss.reminders"
-  ]
+  "version": 1
 }
