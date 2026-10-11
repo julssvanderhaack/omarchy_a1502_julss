@@ -13,11 +13,17 @@
 // toast; without the file it keeps Omarchy's stock 5/8 s.
 //
 // Do Not Disturb is the service's own: while on, toasts are not shown and go
-// straight to history. Read/set through IPC (isDnd/setDnd) because the
-// firstPartyServiceFor proxy is only handed to full bars and Indicators
-// clones, not to plain bar widgets like this one.
+// straight to history. Set through IPC (setDnd); read by watching the
+// service's own ~/.local/state/omarchy/notifications.json ("dnd" key).
+//
+// Consumo: nada se sondea. Antes se lanzaba `omarchy-shell notifications
+// isDnd` cada 2 s (~46 ms de CPU por llamada, ~2,3 % de un núcleo) y un awk
+// del historial cada 4 s. Ahora un FileView vigila notifications.json y un
+// FolderListModel (inotify) vigila history/; solo se relee al cambiar algo,
+// con un repaso de seguridad cada 2 min.
 
 import QtQuick
+import Qt.labs.folderlistmodel
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -72,9 +78,13 @@ BarWidget {
     setDndProc.running = true
   }
 
-  function readDnd() {
-    if (dndProc.running || setDndProc.running) return
-    dndProc.running = true
+  function parseDnd(raw) {
+    try {
+      var parsed = JSON.parse(String(raw || "{}"))
+      if (parsed && typeof parsed.dnd === "boolean") root.dnd = parsed.dnd
+    } catch (e) {
+      // Fichero a medio escribir: el siguiente cambio lo corrige.
+    }
   }
 
   function setDuration(seconds) {
@@ -127,14 +137,44 @@ BarWidget {
     onFileChanged: reload()
   }
 
-  Component.onCompleted: {
-    refresh()
-    readDnd()
+  Component.onCompleted: refresh()
+
+  // "No molestar": el servicio lo guarda (con un pequeño retardo) aquí.
+  FileView {
+    id: dndFile
+    path: root.home + "/.local/state/omarchy/notifications.json"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.parseDnd(text())
+    onFileChanged: reload()
+  }
+
+  // Historial: inotify sobre history/; cualquier alta o baja relee (agrupado).
+  FolderListModel {
+    id: historyWatch
+    folder: "file://" + root.historyDir
+    nameFilters: ["*.json"]
+    showDirs: false
+    onCountChanged: refreshDebounce.restart()
+  }
+
+  Connections {
+    target: historyWatch
+    function onRowsInserted() { refreshDebounce.restart() }
+    function onRowsRemoved() { refreshDebounce.restart() }
+    function onDataChanged() { refreshDebounce.restart() }
   }
 
   Timer {
+    id: refreshDebounce
+    interval: 250
+    onTriggered: root.refresh()
+  }
+
+  // Repaso de seguridad por si se perdiera algún evento.
+  Timer {
     id: pollTimer
-    interval: 4000
+    interval: 120000
     running: true
     repeat: true
     onTriggered: root.refresh()
@@ -148,28 +188,8 @@ BarWidget {
     }
   }
 
-  Timer {
-    interval: 2000
-    running: true
-    repeat: true
-    onTriggered: root.readDnd()
-  }
-
-  Process {
-    id: dndProc
-    command: ["omarchy-shell", "notifications", "isDnd"]
-    stdout: StdioCollector {
-      waitForEnd: true
-      onStreamFinished: {
-        var state = text.trim()
-        if (state === "on" || state === "off") root.dnd = state === "on"
-      }
-    }
-  }
-
   Process {
     id: setDndProc
-    onExited: root.readDnd()
   }
 
   Process {
