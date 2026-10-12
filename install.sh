@@ -47,8 +47,11 @@ fi
 gsettings set org.gnome.desktop.interface cursor-theme Bibata-Modern-Ice 2>/dev/null || true
 "$HOME/.local/bin/julss-appearance" apply 2>/dev/null || true
 
-# Iconos Papirus-Dark con carpetas cian (el hook julss-icons lo mantiene al cambiar de tema)
+# Iconos Papirus-Dark con carpetas cian (al cambiar de tema el hook julss-icons pone los del tema)
 backup_and_copy "$REPO_DIR/omarchy/hooks/theme-set.d/julss-icons" "$CONFIG_DIR/omarchy/hooks/theme-set.d/julss-icons"
+# Logo de la barra con los colores del logo de arranque del tema
+backup_and_copy "$REPO_DIR/omarchy/hooks/theme-set.d/julss-bar-logo" "$CONFIG_DIR/omarchy/hooks/theme-set.d/julss-bar-logo"
+"$HOME/.local/bin/julss-bar-logo" 2>/dev/null || true
 if omarchy pkg add papirus-icon-theme; then
   tmp=$(mktemp -d)
   curl -fsSL -o "$tmp/papirus-folders" https://raw.githubusercontent.com/PapirusDevelopmentTeam/papirus-folders/v1.14.0/papirus-folders &&

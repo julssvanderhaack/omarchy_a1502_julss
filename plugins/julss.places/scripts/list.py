@@ -130,6 +130,114 @@ def collect_media():
     return media
 
 
+# Iconos simbólicos por tipo, buscados en el tema de iconos GTK elegido
+# (gsettings icon-theme, el que fija julss-appearance) siguiendo su Inherits,
+# como hace GTK. Se prueban los nombres en orden.
+ICON_NAMES = {
+    "home": ["user-home-symbolic"],
+    "downloads": ["folder-download-symbolic"],
+    "documents": ["folder-documents-symbolic"],
+    "music": ["folder-music-symbolic"],
+    "pictures": ["folder-pictures-symbolic"],
+    "videos": ["folder-videos-symbolic"],
+    "desktop": ["user-desktop-symbolic"],
+    "templates": ["folder-templates-symbolic"],
+    "public": ["folder-publicshare-symbolic"],
+    "dropbox": ["folder-dropbox-symbolic", "dropbox-symbolic"],
+    "code": ["folder-code-symbolic", "applications-development-symbolic"],
+    "cloud": ["folder-cloud-symbolic", "folder-remote-symbolic"],
+    "games": ["folder-games-symbolic", "applications-games-symbolic"],
+    "books": ["folder-books-symbolic", "accessories-dictionary-symbolic"],
+    "work": ["folder-work-symbolic"],
+    "folder": ["folder-symbolic"],
+    "device": ["drive-removable-media-symbolic", "drive-harddisk-symbolic"],
+    "optical": ["media-optical-symbolic", "drive-optical-symbolic"],
+}
+ICON_BASES = [os.path.expanduser("~/.local/share/icons"), os.path.expanduser("~/.icons"), "/usr/share/icons"]
+ICON_SIZE = 16
+
+
+def theme_dir(name):
+    for base in ICON_BASES:
+        d = os.path.join(base, name)
+        if os.path.isfile(os.path.join(d, "index.theme")):
+            return d
+    return None
+
+
+def parse_index(path):
+    """Devuelve (Inherits, [(subdir, size, scalable)])."""
+    sections, cur = {}, None
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            line = line.strip()
+            if line.startswith("[") and line.endswith("]"):
+                cur = sections.setdefault(line[1:-1], {})
+            elif cur is not None and "=" in line:
+                k, v = line.split("=", 1)
+                cur[k.strip()] = v.strip()
+    main = sections.get("Icon Theme", {})
+    inherits = [x for x in main.get("Inherits", "").split(",") if x]
+    dirs = []
+    for d in (main.get("Directories", "") + "," + main.get("ScaledDirectories", "")).split(","):
+        if d and d in sections:
+            sec = sections[d]
+            try:
+                size = int(sec.get("Size", "0"))
+            except ValueError:
+                size = 0
+            dirs.append((d, size, sec.get("Type", "") == "Scalable"))
+    return inherits, dirs
+
+
+def theme_chain():
+    try:
+        name = subprocess.run(["gsettings", "get", "org.gnome.desktop.interface", "icon-theme"],
+                              capture_output=True, text=True, timeout=2).stdout.strip().strip("'")
+    except (OSError, subprocess.TimeoutExpired):
+        name = ""
+    chain, queue = [], [name or "hicolor"]
+    while queue:
+        t = queue.pop(0)
+        if t in [c[0] for c in chain]:
+            continue
+        d = theme_dir(t)
+        if not d:
+            continue
+        inherits, dirs = parse_index(os.path.join(d, "index.theme"))
+        # Mejor primero el tamaño más cercano a 16 (los Scalable cuentan como exactos).
+        dirs.sort(key=lambda x: (0 if x[2] else abs(x[1] - ICON_SIZE), "@" in x[0]))
+        chain.append((t, d, dirs))
+        queue += inherits
+    if "hicolor" not in [c[0] for c in chain] and theme_dir("hicolor"):
+        d = theme_dir("hicolor")
+        chain.append(("hicolor", d, parse_index(os.path.join(d, "index.theme"))[1]))
+    return chain
+
+
+def lookup_icon(chain, names):
+    # Primero el tema más cercano (el elegido antes que los heredados), y
+    # dentro de cada tema los nombres en orden.
+    for _, d, dirs in chain:
+        for name in names:
+            for sub, _, _ in dirs:
+                for ext in (".svg", ".png"):
+                    f = os.path.join(d, sub, name + ext)
+                    if os.path.isfile(f):
+                        return f
+    return ""
+
+
+def resolve_icons():
+    chain = theme_chain()
+    out = {}
+    for kind, names in ICON_NAMES.items():
+        path = lookup_icon(chain, names)
+        if path:
+            out[kind] = path
+    return {"theme": chain[0][0] if chain else "", "paths": out}
+
+
 XDG = xdg_dirs()
 
 
@@ -139,6 +247,7 @@ def main():
         "home": {"label": "Inicio", "path": home},
         "bookmarks": read_bookmarks(),
         "media": collect_media(),
+        "icons": resolve_icons(),
     }
     print(json.dumps(result))
 

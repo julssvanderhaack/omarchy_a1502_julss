@@ -43,34 +43,23 @@ Panel {
     "folder": "󰉋"
   })
 
-  // Iconos simbólicos del tema, los mismos que la barra lateral de Nautilus.
-  // Si el tema no tiene alguno, se usa el glifo de folderIcons.
-  readonly property var folderIconNames: ({
-    "home": "user-home-symbolic",
-    "downloads": "folder-download-symbolic",
-    "documents": "folder-documents-symbolic",
-    "music": "folder-music-symbolic",
-    "pictures": "folder-pictures-symbolic",
-    "videos": "folder-videos-symbolic",
-    "desktop": "user-desktop-symbolic",
-    "templates": "folder-templates-symbolic",
-    "public": "folder-publicshare-symbolic",
-    "dropbox": "dropbox-symbolic",
-    "code": "code-context-symbolic",
-    "folder": "folder-symbolic"
-  })
+  // Iconos simbólicos del tema de iconos GTK elegido (julss-appearance /
+  // gsettings icon-theme): scripts/list.py los busca en ese tema y su
+  // herencia y devuelve la ruta por tipo. Si no hay ninguno, la carpeta
+  // genérica del tema y, en último caso, el glifo de folderIcons.
+  property var iconPaths: ({})
 
-  function themeIcon(name) {
-    return name ? Quickshell.iconPath(name, true) : ""
+  function fileUrl(path) {
+    return path ? "file://" + path : ""
   }
 
   function folderIconSource(kind) {
-    return root.themeIcon(root.folderIconNames[kind] || root.folderIconNames["folder"])
+    return root.fileUrl(root.iconPaths[kind] || root.iconPaths["folder"])
   }
 
   function deviceIconSource(fstype) {
     var optical = /^(iso9660|udf)$/i.test(String(fstype || ""))
-    return root.themeIcon(optical ? "media-optical-symbolic" : "drive-removable-media-symbolic")
+    return root.fileUrl((optical && root.iconPaths["optical"]) || root.iconPaths["device"])
   }
 
   function folderIcon(kind) {
@@ -98,6 +87,7 @@ Panel {
       root.homePlace = parsed.home || { label: "Inicio", path: "" }
       root.bookmarks = Array.isArray(parsed.bookmarks) ? parsed.bookmarks : []
       root.media = Array.isArray(parsed.media) ? parsed.media : []
+      root.iconPaths = (parsed.icons && parsed.icons.paths) || {}
       root.loadError = ""
     } catch (error) {
       root.loadError = "No se pudieron leer los lugares"

@@ -1,6 +1,6 @@
 #!/bin/bash
-# Mantener fijos paleta GTK, iconos y cursor aunque cambie el tema de Omarchy.
-# omarchy-theme-set-gnome pone icons.theme del tema y Adwaita claro/oscuro
-# según el modo antes de que corran los hooks; aquí se reaplica lo elegido en
-# el panel Pantalla (guardado en ~/.config/julss/appearance.json).
-"$HOME/.local/bin/julss-appearance" apply
+# Al cambiar de tema de Omarchy, la paleta GTK pasa a los colores del tema y
+# los iconos a los que pone Omarchy (icons.theme del tema). El cursor se
+# mantiene. Desde el panel Pantalla se pueden cambiar a mano hasta el próximo
+# cambio de tema (se guarda en ~/.config/julss/appearance.json).
+"$HOME/.local/bin/julss-appearance" follow-theme

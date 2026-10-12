@@ -250,6 +250,35 @@ Panel {
     if (!appearanceProc.running) appearanceProc.running = true
   }
 
+  // ---- Barra (julss): posición, transparencia y color de fondo ----
+  readonly property var barPositions: [
+    { value: "top", label: "Arriba" },
+    { value: "bottom", label: "Abajo" },
+    { value: "left", label: "Izquierda" },
+    { value: "right", label: "Derecha" }
+  ]
+  // Mientras se arrastra, el valor elegido manda sobre el leído del disco.
+  property int barTransparencyPreview: -1
+
+  function barTransparency() {
+    return barTransparencyPreview >= 0 ? barTransparencyPreview : (appearance.barTransparency || 0)
+  }
+
+  function setBar(key, value) {
+    Quickshell.execDetached(["julss-appearance", "set", key, String(value)])
+    barRefresh.restart()
+  }
+
+  function previewBarTransparency(v) {
+    root.barTransparencyPreview = Math.round(v)
+    barTransparencyDebounce.restart()
+  }
+
+  function openBgDir() {
+    root.close()
+    Quickshell.execDetached(["julss-appearance", "open-bg-dir"])
+  }
+
   function setAppearance(key, value) {
     if (!value || value === root.appearance[key]) return
     var cmd = ["julss-appearance", "set", key, value]
@@ -447,6 +476,22 @@ Panel {
     }
   }
 
+  Timer {
+    id: barTransparencyDebounce
+    interval: 120
+    onTriggered: root.setBar("bar-transparency", root.barTransparencyPreview)
+  }
+
+  // Relee el estado tras escribir (el cambio en sí ya se ve al momento).
+  Timer {
+    id: barRefresh
+    interval: 400
+    onTriggered: {
+      root.barTransparencyPreview = -1
+      root.refreshAppearance()
+    }
+  }
+
   Process {
     id: appearanceSetProc
     stdout: StdioCollector { waitForEnd: true }
@@ -543,8 +588,8 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(panelColumn.implicitHeight, Style.space(720))
+    contentWidth: panel.fittedContentWidth(Style.space(780))
+    contentHeight: panel.fittedContentHeight(panelColumn.implicitHeight, Style.space(740))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -633,306 +678,519 @@ Panel {
             }
           }
 
-          // ---------- Brightness ----------
-          PanelSeparator {
-            visible: root.brightnessAvailable
-            foreground: root.bar.foreground
-          }
-
-          Column {
-            visible: root.brightnessAvailable
+          // julss: dos columnas para que el panel no necesite scroll.
+          Row {
+            id: columnsRow
             width: parent.width
-            spacing: Style.space(6)
+            spacing: Style.space(24)
 
-            Item {
-              width: parent.width
-              implicitHeight: Math.max(brightnessHeader.implicitHeight, brightnessPercent.implicitHeight)
+            // Pantalla: brillo, texto, escala y barra.
+            Column {
+              id: leftColumn
+              width: (columnsRow.width - columnsRow.spacing) / 2
+              spacing: Style.space(14)
 
-              PanelSectionHeader {
-                id: brightnessHeader
-                text: "BRILLO"
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-              }
+                  // ---------- Brightness ----------
+                  PanelSeparator {
+                    visible: root.brightnessAvailable
+                    foreground: root.bar.foreground
+                  }
 
-              Text {
-                id: brightnessPercent
-                textFormat: Text.PlainText
-                text: Math.round(brightnessSlider.dragging ? brightnessSlider.liveValue : root.brightnessPercent) + "%"
-                color: Qt.darker(root.bar.foreground, 1.4)
-                font.family: root.bar.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                anchors.right: parent.right
-                anchors.rightMargin: Style.space(6)
-                anchors.verticalCenter: parent.verticalCenter
-              }
+                  Column {
+                    visible: root.brightnessAvailable
+                    width: parent.width
+                    spacing: Style.space(6)
+
+                    Item {
+                      width: parent.width
+                      implicitHeight: Math.max(brightnessHeader.implicitHeight, brightnessPercent.implicitHeight)
+
+                      PanelSectionHeader {
+                        id: brightnessHeader
+                        text: "BRILLO"
+                        foreground: root.bar.foreground
+                        fontFamily: root.bar.fontFamily
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+
+                      Text {
+                        id: brightnessPercent
+                        textFormat: Text.PlainText
+                        text: Math.round(brightnessSlider.dragging ? brightnessSlider.liveValue : root.brightnessPercent) + "%"
+                        color: Qt.darker(root.bar.foreground, 1.4)
+                        font.family: root.bar.fontFamily
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                        anchors.right: parent.right
+                        anchors.rightMargin: Style.space(6)
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+                    }
+
+                    CursorSurface {
+                      id: brightnessRow
+                      width: parent.width
+                      height: brightnessSlider.implicitHeight + Style.spacing.controlGap
+                      hasCursor: root.cursorActive && root.focusSection === "brightness" && root.selectedIndex === -1
+                      onHasCursorChanged: if (hasCursor) root.ensureCursorVisible(brightnessRow)
+                      foreground: root.bar.foreground
+                      outline: true
+
+                      PanelSlider {
+                        id: brightnessSlider
+                        bar: root.bar
+                        anchors.fill: parent
+                        anchors.leftMargin: Style.space(6)
+                        anchors.rightMargin: Style.space(6)
+                        minimum: 1
+                        maximum: 100
+                        step: 1
+                        value: root.brightnessPercent
+                        integer: true
+                        onMoved: function(v) { root.previewBrightness(v) }
+                        onReleased: function(v) {
+                          brightnessDebounce.stop()
+                          root.setBrightness(v)
+                        }
+                      }
+
+                      HoverHandler {
+                        onHoveredChanged: if (hovered && !root.reflowingText) {
+                          root.cursorActive = true
+                          root.focusSection = "brightness"
+                          root.selectedIndex = -1
+                        }
+                      }
+                    }
+                  }
+
+                  // ---------- Text size ----------
+                  PanelSeparator {
+                    foreground: root.bar.foreground
+                  }
+
+                  Column {
+                    width: parent.width
+                    spacing: Style.space(6)
+
+                    Item {
+                      width: parent.width
+                      implicitHeight: Math.max(textSizeHeader.implicitHeight, textSizePx.implicitHeight)
+
+                      PanelSectionHeader {
+                        id: textSizeHeader
+                        text: "TAMAÑO DE TEXTO"
+                        foreground: root.bar.foreground
+                        fontFamily: root.bar.fontFamily
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+
+                      Text {
+                        id: textSizePx
+                        textFormat: Text.PlainText
+                        text: (textSizeSlider.dragging
+                               ? root.textSizeStops[Math.round(textSizeSlider.liveValue)]
+                               : root.displayedTextPx()) + "px"
+                        color: Qt.darker(root.bar.foreground, 1.4)
+                        font.family: root.bar.fontFamily
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                        anchors.right: parent.right
+                        anchors.rightMargin: Style.space(6)
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+                    }
+
+                    CursorSurface {
+                      id: textSizeRow
+                      width: parent.width
+                      height: textSizeSlider.implicitHeight + Style.spacing.controlGap
+                      hasCursor: root.cursorActive && root.focusSection === "textsize" && root.selectedIndex === -1
+                      onHasCursorChanged: if (hasCursor) root.ensureCursorVisible(textSizeRow)
+                      foreground: root.bar.foreground
+                      outline: true
+
+                      PanelSlider {
+                        id: textSizeSlider
+                        bar: root.bar
+                        anchors.fill: parent
+                        anchors.leftMargin: Style.space(6)
+                        anchors.rightMargin: Style.space(6)
+                        minimum: 0
+                        maximum: root.textSizeStops.length - 1
+                        step: 1
+                        integer: true
+                        tickCount: root.textSizeStops.length
+                        value: root.currentTextIndex()
+                        onReleased: function(v) { root.setTextSize(root.textSizeStops[Math.round(v)]) }
+                      }
+
+                      HoverHandler {
+                        onHoveredChanged: if (hovered && !root.reflowingText) {
+                          root.cursorActive = true
+                          root.focusSection = "textsize"
+                          root.selectedIndex = -1
+                        }
+                      }
+                    }
+                  }
+
+                  // ---------- Scale ----------
+                  PanelSeparator {
+                    foreground: root.bar.foreground
+                  }
+
+                  Column {
+                    width: parent.width
+                    spacing: Style.space(10)
+
+                    Item {
+                      width: parent.width
+                      implicitHeight: Math.max(scaleHeader.implicitHeight, scaleMonitor.implicitHeight)
+
+                      PanelSectionHeader {
+                        id: scaleHeader
+                        text: "ESCALA"
+                        foreground: root.bar.foreground
+                        fontFamily: root.bar.fontFamily
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+
+                      // Name the monitor SCALE targets, since it only applies to the
+                      // focused one.
+                      Text {
+                        id: scaleMonitor
+                        textFormat: Text.PlainText
+                        text: root.focusedMonitor
+                        // Only worth naming when more than one display is in play.
+                        visible: root.focusedMonitor !== "" && root.enabledDisplayCount > 1
+                        color: Qt.darker(root.bar.foreground, 1.4)
+                        font.family: root.bar.fontFamily
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                        anchors.right: parent.right
+                        anchors.rightMargin: Style.space(6)
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+                    }
+
+                    Grid {
+                      id: scaleRow
+                      width: parent.width
+                      columns: root.scaleValues.length
+                      spacing: Style.spacing.xs
+
+                      readonly property real cellWidth: root.scaleValues.length > 0
+                        ? (width - spacing * (columns - 1)) / columns
+                        : 0
+
+                      Repeater {
+                        model: root.scaleValues
+
+                        ScalePill {
+                          required property string modelData
+                          required property int index
+
+                          scaleValue: modelData
+                          scaleIndex: index
+                          width: scaleRow.cellWidth
+                        }
+                      }
+                    }
+                  }
+
+                  // ---------- Barra (julss) ----------
+                  PanelSeparator {
+                    foreground: root.bar.foreground
+                  }
+
+                  Column {
+                    width: parent.width
+                    spacing: Style.space(10)
+
+                    PanelSectionHeader {
+                      text: "BARRA"
+                      foreground: root.bar.foreground
+                      fontFamily: root.bar.fontFamily
+                    }
+
+                    Grid {
+                      id: barPositionRow
+                      width: parent.width
+                      columns: root.barPositions.length
+                      spacing: Style.spacing.xs
+                      readonly property real cellWidth: (width - spacing * (columns - 1)) / columns
+
+                      Repeater {
+                        model: root.barPositions
+
+                        Button {
+                          required property var modelData
+                          width: barPositionRow.cellWidth
+                          text: modelData.label
+                          fontSize: Style.font.caption
+                          foreground: root.bar.foreground
+                          fontFamily: root.bar.fontFamily
+                          horizontalPadding: Style.spacing.xs
+                          verticalPadding: Style.spacing.controlPaddingY
+                          bordered: true
+                          active: (root.appearance.barPosition || "top") === modelData.value
+                          onClicked: root.setBar("bar-position", modelData.value)
+                        }
+                      }
+                    }
+
+                    Item {
+                      width: parent.width
+                      implicitHeight: barTransparencyLabel.implicitHeight
+
+                      Text {
+                        id: barTransparencyLabel
+                        textFormat: Text.PlainText
+                        text: "Transparencia"
+                        color: Qt.darker(root.bar.foreground, 1.4)
+                        font.family: root.bar.fontFamily
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                        anchors.left: parent.left
+                      }
+
+                      Text {
+                        textFormat: Text.PlainText
+                        text: Math.round(barTransparencySlider.dragging ? barTransparencySlider.liveValue : root.barTransparency()) + "%"
+                        color: Qt.darker(root.bar.foreground, 1.4)
+                        font.family: root.bar.fontFamily
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                        anchors.right: parent.right
+                        anchors.rightMargin: Style.space(6)
+                      }
+                    }
+
+                    PanelSlider {
+                      id: barTransparencySlider
+                      bar: root.bar
+                      width: parent.width - Style.space(12)
+                      x: Style.space(6)
+                      minimum: 0
+                      maximum: 100
+                      step: 5
+                      integer: true
+                      value: root.barTransparency()
+                      onMoved: function(v) { root.previewBarTransparency(v) }
+                      onReleased: function(v) {
+                        barTransparencyDebounce.stop()
+                        root.barTransparencyPreview = Math.round(v)
+                        root.setBar("bar-transparency", Math.round(v))
+                      }
+                    }
+
+                    Text {
+                      textFormat: Text.PlainText
+                      text: "Color de fondo"
+                      color: Qt.darker(root.bar.foreground, 1.4)
+                      font.family: root.bar.fontFamily
+                      font.pixelSize: Style.font.caption
+                      font.bold: true
+                    }
+
+                    // Muestras de la paleta del tema; la primera es la del tema
+                    // (quita el color propio). Al cambiar de tema vuelve la del tema.
+                    Flow {
+                      width: parent.width
+                      spacing: Style.spacing.xs
+
+                      BarSwatch {
+                        swatchColor: root.appearance.themeBarColor || "#000000"
+                        isTheme: true
+                        selected: !root.appearance.barColor
+                      }
+
+                      Repeater {
+                        model: root.appearance.barSwatches || []
+
+                        BarSwatch {
+                          required property string modelData
+                          swatchColor: modelData
+                          selected: root.appearance.barColor === modelData
+                        }
+                      }
+                    }
+
+                    Row {
+                      width: parent.width
+                      spacing: Style.spacing.xs
+
+                      TextField {
+                        id: barHexField
+                        width: parent.width - barHexApply.width - parent.spacing
+                        placeholderText: "#rrggbb"
+                        text: root.appearance.barColor || ""
+                        foreground: root.bar.foreground
+                        font.family: root.bar.fontFamily
+                        font.pixelSize: Style.font.body
+                        onAccepted: barHexApply.clicked()
+                      }
+
+                      Button {
+                        id: barHexApply
+                        text: "Aplicar"
+                        height: barHexField.height
+                        fontSize: Style.font.caption
+                        foreground: root.bar.foreground
+                        fontFamily: root.bar.fontFamily
+                        bordered: true
+                        onClicked: {
+                          var hex = String(barHexField.text || "").trim()
+                          if (hex.charAt(0) !== "#") hex = "#" + hex
+                          if (/^#[0-9a-fA-F]{6}$/.test(hex)) root.setBar("bar-color", hex.toLowerCase())
+                        }
+                      }
+                    }
+                  }
+
             }
 
-            CursorSurface {
-              id: brightnessRow
-              width: parent.width
-              height: brightnessSlider.implicitHeight + Style.spacing.controlGap
-              hasCursor: root.cursorActive && root.focusSection === "brightness" && root.selectedIndex === -1
-              onHasCursorChanged: if (hasCursor) root.ensureCursorVisible(brightnessRow)
-              foreground: root.bar.foreground
-              outline: true
+            // Apariencia, pantallas y distribución.
+            Column {
+              id: rightColumn
+              width: (columnsRow.width - columnsRow.spacing) / 2
+              spacing: Style.space(14)
 
-              PanelSlider {
-                id: brightnessSlider
-                bar: root.bar
-                anchors.fill: parent
-                anchors.leftMargin: Style.space(6)
-                anchors.rightMargin: Style.space(6)
-                minimum: 1
-                maximum: 100
-                step: 1
-                value: root.brightnessPercent
-                integer: true
-                onMoved: function(v) { root.previewBrightness(v) }
-                onReleased: function(v) {
-                  brightnessDebounce.stop()
-                  root.setBrightness(v)
-                }
-              }
+                  // ---------- Apariencia (julss) ----------
+                  PanelSeparator {
+                    foreground: root.bar.foreground
+                  }
 
-              HoverHandler {
-                onHoveredChanged: if (hovered && !root.reflowingText) {
-                  root.cursorActive = true
-                  root.focusSection = "brightness"
-                  root.selectedIndex = -1
-                }
-              }
+                  Column {
+                    width: parent.width
+                    spacing: Style.space(10)
+
+                    Item {
+                      width: parent.width
+                      implicitHeight: appearanceHeader.implicitHeight
+
+                      PanelSectionHeader {
+                        id: appearanceHeader
+                        text: "APARIENCIA"
+                        foreground: root.bar.foreground
+                        fontFamily: root.bar.fontFamily
+                        anchors.left: parent.left
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+
+                      Text {
+                        textFormat: Text.PlainText
+                        text: "APLICANDO…"
+                        visible: root.appearanceBusy
+                        color: Qt.darker(root.bar.foreground, 1.4)
+                        font.family: root.bar.fontFamily
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                        anchors.right: parent.right
+                        anchors.rightMargin: Style.space(6)
+                        anchors.verticalCenter: parent.verticalCenter
+                      }
+                    }
+
+                    AppearanceDropdown { id: themeDropdown; label: "Tema de Omarchy"; key: "theme"; options: root.appearance.themes || [] }
+                    // Fondo + botón para abrir ~/.config/omarchy/backgrounds/<tema>,
+                    // donde van los fondos extra de ese tema.
+                    Column {
+                      width: parent.width
+                      spacing: Style.spacing.labelGap
+
+                      Text {
+                        textFormat: Text.PlainText
+                        text: "Fondo de pantalla"
+                        color: Qt.darker(root.bar.foreground, 1.4)
+                        font.family: root.bar.fontFamily
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                      }
+
+                      Row {
+                        width: parent.width
+                        spacing: Style.spacing.xs
+
+                        AppearanceDropdown {
+                          id: bgDropdown
+                          key: "bg"
+                          showLabel: false
+                          options: root.appearance.bgs || []
+                          width: parent.width - bgFolderButton.width - parent.spacing
+                        }
+
+                        Button {
+                          id: bgFolderButton
+                          width: height
+                          height: bgDropdown.height
+                          iconText: "󰉋"
+                          tooltipText: "Abrir la carpeta de fondos extra de este tema"
+                          foreground: root.bar.foreground
+                          fontFamily: root.bar.fontFamily
+                          bordered: true
+                          onClicked: root.openBgDir()
+                        }
+                      }
+                    }
+
+                    AppearanceDropdown { id: gtkDropdown; label: "Tema GTK"; key: "gtk"; options: root.appearance.gtks || [] }
+                    AppearanceDropdown { id: iconsDropdown; label: "Iconos"; key: "icons"; options: root.appearance.iconThemes || [] }
+                    AppearanceDropdown { id: cursorDropdown; label: "Cursor"; key: "cursor"; options: root.appearance.cursors || [] }
+                  }
+
+                  // ---------- Monitors ----------
+                  PanelSeparator {
+                    visible: root.displays.length > 1
+                    foreground: root.bar.foreground
+                  }
+
+                  Column {
+                    width: parent.width
+                    spacing: Style.space(10)
+                    visible: root.displays.length > 1
+
+                    PanelSectionHeader {
+                      text: "PANTALLAS"
+                      foreground: root.bar.foreground
+                      fontFamily: root.bar.fontFamily
+                    }
+
+                    Repeater {
+                      model: root.displays
+
+                      MonitorRow {
+                        required property var modelData
+                        required property int index
+
+                        width: rightColumn.width
+                        display: modelData
+                        rowIndex: index
+                      }
+                    }
+                  }
+
+                  // ---------- Monitor Layout (plugin io.github.cjgarcia1229.monitor-layout) ----------
+                  PanelSeparator {
+                    foreground: root.bar.foreground
+                  }
+
+                  Button {
+                    width: parent.width
+                    iconText: "󰍺"
+                    text: "Distribución de pantallas"
+                    tooltipText: "Abrir Distribución de pantallas"
+                    foreground: root.bar.foreground
+                    fontFamily: root.bar.fontFamily
+                    bordered: true
+                    onClicked: root.openMonitorLayout()
+                  }
+
             }
-          }
-
-          // ---------- Text size ----------
-          PanelSeparator {
-            foreground: root.bar.foreground
-          }
-
-          Column {
-            width: parent.width
-            spacing: Style.space(6)
-
-            Item {
-              width: parent.width
-              implicitHeight: Math.max(textSizeHeader.implicitHeight, textSizePx.implicitHeight)
-
-              PanelSectionHeader {
-                id: textSizeHeader
-                text: "TAMAÑO DE TEXTO"
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-              }
-
-              Text {
-                id: textSizePx
-                textFormat: Text.PlainText
-                text: (textSizeSlider.dragging
-                       ? root.textSizeStops[Math.round(textSizeSlider.liveValue)]
-                       : root.displayedTextPx()) + "px"
-                color: Qt.darker(root.bar.foreground, 1.4)
-                font.family: root.bar.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                anchors.right: parent.right
-                anchors.rightMargin: Style.space(6)
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-
-            CursorSurface {
-              id: textSizeRow
-              width: parent.width
-              height: textSizeSlider.implicitHeight + Style.spacing.controlGap
-              hasCursor: root.cursorActive && root.focusSection === "textsize" && root.selectedIndex === -1
-              onHasCursorChanged: if (hasCursor) root.ensureCursorVisible(textSizeRow)
-              foreground: root.bar.foreground
-              outline: true
-
-              PanelSlider {
-                id: textSizeSlider
-                bar: root.bar
-                anchors.fill: parent
-                anchors.leftMargin: Style.space(6)
-                anchors.rightMargin: Style.space(6)
-                minimum: 0
-                maximum: root.textSizeStops.length - 1
-                step: 1
-                integer: true
-                tickCount: root.textSizeStops.length
-                value: root.currentTextIndex()
-                onReleased: function(v) { root.setTextSize(root.textSizeStops[Math.round(v)]) }
-              }
-
-              HoverHandler {
-                onHoveredChanged: if (hovered && !root.reflowingText) {
-                  root.cursorActive = true
-                  root.focusSection = "textsize"
-                  root.selectedIndex = -1
-                }
-              }
-            }
-          }
-
-          // ---------- Scale ----------
-          PanelSeparator {
-            foreground: root.bar.foreground
-          }
-
-          Column {
-            width: parent.width
-            spacing: Style.space(10)
-
-            Item {
-              width: parent.width
-              implicitHeight: Math.max(scaleHeader.implicitHeight, scaleMonitor.implicitHeight)
-
-              PanelSectionHeader {
-                id: scaleHeader
-                text: "ESCALA"
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-              }
-
-              // Name the monitor SCALE targets, since it only applies to the
-              // focused one.
-              Text {
-                id: scaleMonitor
-                textFormat: Text.PlainText
-                text: root.focusedMonitor
-                // Only worth naming when more than one display is in play.
-                visible: root.focusedMonitor !== "" && root.enabledDisplayCount > 1
-                color: Qt.darker(root.bar.foreground, 1.4)
-                font.family: root.bar.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                anchors.right: parent.right
-                anchors.rightMargin: Style.space(6)
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-
-            Grid {
-              id: scaleRow
-              width: parent.width
-              columns: root.scaleValues.length
-              spacing: Style.spacing.xs
-
-              readonly property real cellWidth: root.scaleValues.length > 0
-                ? (width - spacing * (columns - 1)) / columns
-                : 0
-
-              Repeater {
-                model: root.scaleValues
-
-                ScalePill {
-                  required property string modelData
-                  required property int index
-
-                  scaleValue: modelData
-                  scaleIndex: index
-                  width: scaleRow.cellWidth
-                }
-              }
-            }
-          }
-
-          // ---------- Apariencia (julss) ----------
-          PanelSeparator {
-            foreground: root.bar.foreground
-          }
-
-          Column {
-            width: parent.width
-            spacing: Style.space(10)
-
-            Item {
-              width: parent.width
-              implicitHeight: appearanceHeader.implicitHeight
-
-              PanelSectionHeader {
-                id: appearanceHeader
-                text: "APARIENCIA"
-                foreground: root.bar.foreground
-                fontFamily: root.bar.fontFamily
-                anchors.left: parent.left
-                anchors.verticalCenter: parent.verticalCenter
-              }
-
-              Text {
-                textFormat: Text.PlainText
-                text: "APLICANDO…"
-                visible: root.appearanceBusy
-                color: Qt.darker(root.bar.foreground, 1.4)
-                font.family: root.bar.fontFamily
-                font.pixelSize: Style.font.caption
-                font.bold: true
-                anchors.right: parent.right
-                anchors.rightMargin: Style.space(6)
-                anchors.verticalCenter: parent.verticalCenter
-              }
-            }
-
-            AppearanceDropdown { id: themeDropdown; label: "Tema de Omarchy"; key: "theme"; options: root.appearance.themes || [] }
-            AppearanceDropdown { id: bgDropdown; label: "Fondo de pantalla"; key: "bg"; options: root.appearance.bgs || [] }
-            AppearanceDropdown { id: gtkDropdown; label: "Tema GTK"; key: "gtk"; options: root.appearance.gtks || [] }
-            AppearanceDropdown { id: iconsDropdown; label: "Iconos"; key: "icons"; options: root.appearance.iconThemes || [] }
-            AppearanceDropdown { id: cursorDropdown; label: "Cursor"; key: "cursor"; options: root.appearance.cursors || [] }
-          }
-
-          // ---------- Monitors ----------
-          PanelSeparator {
-            visible: root.displays.length > 1
-            foreground: root.bar.foreground
-          }
-
-          Column {
-            width: parent.width
-            spacing: Style.space(10)
-            visible: root.displays.length > 1
-
-            PanelSectionHeader {
-              text: "PANTALLAS"
-              foreground: root.bar.foreground
-              fontFamily: root.bar.fontFamily
-            }
-
-            Repeater {
-              model: root.displays
-
-              MonitorRow {
-                required property var modelData
-                required property int index
-
-                width: panelColumn.width
-                display: modelData
-                rowIndex: index
-              }
-            }
-          }
-
-          // ---------- Monitor Layout (plugin io.github.cjgarcia1229.monitor-layout) ----------
-          PanelSeparator {
-            foreground: root.bar.foreground
-          }
-
-          Button {
-            width: parent.width
-            iconText: "󰍺"
-            text: "Distribución de pantallas"
-            tooltipText: "Abrir Distribución de pantallas"
-            foreground: root.bar.foreground
-            fontFamily: root.bar.fontFamily
-            bordered: true
-            onClicked: root.openMonitorLayout()
           }
 
           Item {
@@ -944,9 +1202,41 @@ Panel {
     }
   }
 
+  component BarSwatch: Rectangle {
+    id: swatch
+    property string swatchColor: "#000000"
+    property bool isTheme: false
+    property bool selected: false
+
+    width: Style.space(26)
+    height: Style.space(26)
+    radius: Style.cornerRadius
+    color: swatchColor
+    border.width: selected ? Math.max(2, Style.space(2)) : 1
+    border.color: selected ? Color.accent : Qt.rgba(root.bar.foreground.r, root.bar.foreground.g, root.bar.foreground.b, 0.35)
+
+    // La muestra del tema lleva una «T» para distinguirla.
+    Text {
+      anchors.centerIn: parent
+      visible: swatch.isTheme
+      text: "T"
+      color: Qt.colorEqual(swatch.swatchColor, "transparent") ? root.bar.foreground
+        : ((swatch.color.r * 0.299 + swatch.color.g * 0.587 + swatch.color.b * 0.114) > 0.55 ? "#000000" : "#ffffff")
+      font.family: root.bar.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: true
+    }
+
+    MouseArea {
+      anchors.fill: parent
+      cursorShape: Qt.PointingHandCursor
+      onClicked: root.setBar("bar-color", swatch.isTheme ? "theme" : swatch.swatchColor)
+    }
+  }
+
   component AppearanceDropdown: Dropdown {
     required property string key
-    width: panelColumn.width
+    width: rightColumn.width
     foreground: root.bar.foreground
     fontFamily: root.bar.fontFamily
     onChanged: function(v) { root.setAppearance(key, v) }

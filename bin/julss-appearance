@@ -7,6 +7,19 @@
 #   julss-appearance state                 JSON con opciones y valores actuales
 #   julss-appearance set theme|bg|gtk|icons|cursor VALOR
 #   julss-appearance apply                 reaplica gtk/iconos/cursor guardados
+#   julss-appearance follow-theme          tras cambiar de tema de Omarchy: GTK
+#                                          con los colores del tema e iconos los
+#                                          que pone Omarchy (icons.theme); cursor igual
+#   julss-appearance set bar-position top|bottom|left|right
+#   julss-appearance set bar-transparency 0-100
+#   julss-appearance set bar-color '#rrggbb'|theme
+#                                          fondo de la barra: se escribe en
+#                                          ~/.config/omarchy/shell.toml [bar]
+#                                          (la shell lo vigila y gana al tema);
+#                                          el color vuelve al del tema en cada
+#                                          cambio de tema, la transparencia no
+#   julss-appearance open-bg-dir           abre (creándola) la carpeta de fondos
+#                                          extra del tema actual
 import json, os, re, subprocess, sys
 from pathlib import Path
 
@@ -19,6 +32,9 @@ ICON_DIRS = [HOME / ".local/share/icons", HOME / ".icons", Path("/usr/share/icon
 IMG = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
 DEFAULTS = {"gtk": "hackerman", "icons": "Papirus-Dark-Hackerman-Mint", "cursor": "Bibata-Modern-Ice"}
 HYPR = HOME / ".config/hypr/hyprland.lua"
+USER_SHELL = HOME / ".config/omarchy/shell.toml"
+SHELL_JSON = HOME / ".config/omarchy/shell.json"
+HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
 def run(*cmd):
@@ -49,9 +65,14 @@ def theme_slugs():
     return sorted(names)
 
 
+# Temas instalados desde git (p. ej. Ayaka) no traen colors.toml: Omarchy lo
+# genera solo para el tema activo, así que follow-theme guarda aquí una copia.
+COLORS_CACHE = HOME / ".local/state/julss/theme-colors"
+
+
 def theme_colors(slug):
-    for d in (USER_THEMES, SYS_THEMES):
-        f = d / slug / "colors.toml"
+    for f in (USER_THEMES / slug / "colors.toml", SYS_THEMES / slug / "colors.toml",
+              COLORS_CACHE / f"{slug}.toml"):
         if f.is_file():
             return f
     return None
@@ -149,6 +170,133 @@ def apply_cursor(value):
             HYPR.write_text(n)
 
 
+def toml_get(path, section, key):
+    cur = None
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        t = line.strip()
+        m = re.match(r"^\[([A-Za-z0-9_-]+)\]", t)
+        if m:
+            cur = m.group(1)
+        elif cur == section:
+            m = re.match(rf'^{re.escape(key)}\s*=\s*"?([^"#]+?)"?\s*(#.*)?$', t)
+            if m:
+                return m.group(1).strip()
+    return None
+
+
+def toml_set(path, section, key, value):
+    """Pone (o quita con value=None) section.key conservando el resto."""
+    try:
+        lines = path.read_text().splitlines()
+    except OSError:
+        lines = []
+    out, cur, done, sec_end = [], None, False, None
+    for line in lines:
+        t = line.strip()
+        m = re.match(r"^\[([A-Za-z0-9_-]+)\]", t)
+        if m:
+            if cur == section and not done and value is not None:
+                out.append(f"{key} = {value}")
+                done = True
+            cur = m.group(1)
+        elif cur == section and re.match(rf"^{re.escape(key)}\s*=", t):
+            if value is not None and not done:
+                out.append(f"{key} = {value}")
+                done = True
+            continue
+        out.append(line)
+    if value is not None and not done:
+        if cur == section:
+            out.append(f"{key} = {value}")
+        else:
+            if out and out[-1].strip():
+                out.append("")
+            out += [f"[{section}]", f"{key} = {value}"]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text("\n".join(out).rstrip() + "\n")
+    os.replace(tmp, path)
+
+
+def palette():
+    out = {}
+    f = STATE / "theme/colors.toml"
+    try:
+        for line in f.read_text().splitlines():
+            m = re.match(r'^([a-z0-9_]+)\s*=\s*"(#[0-9a-fA-F]{6})"', line.strip())
+            if m:
+                out[m.group(1)] = m.group(2).lower()
+    except OSError:
+        pass
+    return out
+
+
+def theme_bar_color():
+    v = toml_get(STATE / "theme/shell.toml", "bar", "background") or "background"
+    return v.lower() if HEX.match(v) else palette().get(v, "#000000")
+
+
+def theme_bar_alpha():
+    try:
+        return float(toml_get(STATE / "theme/shell.toml", "bar", "background-alpha") or 1)
+    except ValueError:
+        return 1.0
+
+
+def bar_state():
+    try:
+        bar = json.loads(SHELL_JSON.read_text()).get("bar", {})
+    except Exception:
+        bar = {}
+    pal = palette()
+    try:
+        alpha = float(toml_get(USER_SHELL, "bar", "background-alpha"))
+    except (TypeError, ValueError):
+        alpha = theme_bar_alpha()
+    if bar.get("transparent") is True:
+        alpha = 0.0
+    swatches = []
+    for k in ["background", "color0", "color8", "color1", "color2", "color3", "color4",
+              "color5", "color6", "accent", "color7", "foreground"]:
+        c = pal.get(k)
+        if c and c not in swatches:
+            swatches.append(c)
+    custom = toml_get(USER_SHELL, "bar", "background")
+    return {
+        "barPosition": bar.get("position", "top"),
+        "barTransparency": round((1 - max(0.0, min(1.0, alpha))) * 100),
+        "barColor": custom.lower() if custom and HEX.match(custom) else "",
+        "themeBarColor": theme_bar_color(),
+        "barSwatches": swatches,
+    }
+
+
+def set_bar(key, value):
+    if key == "bar-position":
+        subprocess.run(["omarchy-bar", "position", value], capture_output=True)
+    elif key == "bar-transparency":
+        pct = max(0, min(100, int(float(value))))
+        # La transparencia la lleva el alpha; el modo "transparent" de Omarchy
+        # la forzaría al 100 %, así que se apaga.
+        try:
+            if json.loads(SHELL_JSON.read_text()).get("bar", {}).get("transparent") is True:
+                subprocess.run(["omarchy-bar", "transparent", "false"], capture_output=True)
+        except Exception:
+            pass
+        toml_set(USER_SHELL, "bar", "background-alpha", f"{1 - pct / 100:.2f}")
+    elif key == "bar-color":
+        if value == "theme":
+            toml_set(USER_SHELL, "bar", "background", None)
+        elif HEX.match(value):
+            toml_set(USER_SHELL, "bar", "background", f'"{value.lower()}"')
+        else:
+            sys.exit(f"color no válido: {value}")
+
+
 def apply(conf):
     apply_gtk(conf["gtk"])
     apply_icons(conf["icons"])
@@ -167,13 +315,40 @@ def main():
             "gtk": conf["gtk"], "gtks": gtk_options(),
             "icons": conf["icons"], "iconThemes": icon_themes(False),
             "cursor": conf["cursor"], "cursors": icon_themes(True),
+            **bar_state(),
         }))
     elif cmd == "apply":
         apply(conf)
+    elif cmd == "follow-theme":
+        name = (STATE / "theme.name").read_text().strip() if (STATE / "theme.name").exists() else ""
+        current = STATE / "theme/colors.toml"
+        if name and not theme_colors(name) and current.is_file():
+            COLORS_CACHE.mkdir(parents=True, exist_ok=True)
+            (COLORS_CACHE / f"{name}.toml").write_text(current.read_text())
+        if theme_colors(name):
+            conf["gtk"] = name
+        else:
+            conf["gtk"] = "adwaita-light" if is_light(STATE / "theme/colors.toml") else "adwaita"
+        # Igual que omarchy-theme-set-gnome: icons.theme del tema o Yaru-blue.
+        icons_file = STATE / "theme/icons.theme"
+        conf["icons"] = (icons_file.read_text().strip() if icons_file.exists() else "") or "Yaru-blue"
+        save(conf)
+        apply(conf)
+        # El color de barra elegido a mano no debe tapar el del tema nuevo.
+        toml_set(USER_SHELL, "bar", "background", None)
+    elif cmd == "open-bg-dir":
+        name = (STATE / "theme.name").read_text().strip() if (STATE / "theme.name").exists() else ""
+        if not name:
+            sys.exit("no hay tema actual")
+        d = HOME / ".config/omarchy/backgrounds" / name
+        d.mkdir(parents=True, exist_ok=True)
+        subprocess.Popen(["gio", "open", str(d)], start_new_session=True)
     elif cmd == "set" and len(sys.argv) == 4:
         key, value = sys.argv[2], sys.argv[3]
         if key == "theme":
             subprocess.run(["omarchy-theme-set", value])
+        elif key.startswith("bar-"):
+            set_bar(key, value)
         elif key == "bg":
             subprocess.run(["omarchy-theme-bg-set", value])
         elif key in ("gtk", "icons", "cursor"):

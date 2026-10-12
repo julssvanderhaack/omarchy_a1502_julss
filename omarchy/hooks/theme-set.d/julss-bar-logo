@@ -1,0 +1,3 @@
+#!/bin/bash
+# Logo de la barra con los colores del logo de la pantalla de carga del tema.
+"$HOME/.local/bin/julss-bar-logo"

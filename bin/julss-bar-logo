@@ -1,0 +1,45 @@
+#!/usr/bin/python3 -I
+# Genera ~/.local/state/julss/bar-logo.png para el logo de la barra (julss.menu)
+# con los colores del logo de la pantalla de carga del tema actual (su
+# unlock.png, el que usa omarchy-plymouth-set-by-theme). Si unlock.png es el
+# logotipo de texto de Omarchy se usa tal cual (recortado); si es otro dibujo
+# (Lumon, Tokyo Night…), se pinta el logotipo de texto con su color dominante.
+# Lo llama el hook theme-set.d/julss-bar-logo.
+import os
+from collections import Counter
+from PIL import Image
+
+HOME = os.path.expanduser("~")
+UNLOCK = os.path.join(HOME, ".local/state/omarchy/current/theme/unlock.png")
+OUT = os.path.join(HOME, ".local/state/julss/bar-logo.png")
+# Logotipo de texto de referencia (forma), del tema Hackerman.
+WORDMARK = "/usr/share/omarchy/themes/hackerman/unlock.png"
+
+
+def cropped(im):
+    box = im.getchannel("A").point(lambda a: 255 if a > 40 else 0).getbbox()
+    return im.crop(box) if box else im
+
+
+def dominant(im):
+    pixels = [p[:3] for p in im.get_flattened_data() if p[3] > 200] if hasattr(im, "get_flattened_data") \
+        else [p[:3] for p in im.getdata() if p[3] > 200]
+    return Counter(pixels).most_common(1)[0][0] if pixels else (255, 255, 255)
+
+
+def main():
+    os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    src = cropped(Image.open(UNLOCK if os.path.exists(UNLOCK) else WORDMARK).convert("RGBA"))
+    # Logotipos de texto (alargados, aunque cambie el estilo como en Vulkanite).
+    if 3.5 < src.width / src.height < 6:
+        out = src
+    else:
+        shape = cropped(Image.open(WORDMARK).convert("RGBA"))
+        out = Image.new("RGBA", shape.size, dominant(src) + (0,))
+        out.putalpha(shape.getchannel("A"))
+    tmp = OUT + ".tmp.png"
+    out.save(tmp)
+    os.replace(tmp, OUT)
+
+
+main()
