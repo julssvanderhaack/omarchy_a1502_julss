@@ -1,6 +1,6 @@
 #!/bin/bash
-# Mantener Papirus-Dark como tema de iconos aunque el tema de Omarchy traiga
-# su propio icons.theme (Omarchy lo aplica justo antes de los hooks).
-if [[ -d $HOME/.local/share/icons/Papirus-Dark || -d /usr/share/icons/Papirus-Dark ]]; then
-  gsettings set org.gnome.desktop.interface icon-theme "Papirus-Dark"
-fi
+# Mantener fijos paleta GTK, iconos y cursor aunque cambie el tema de Omarchy.
+# omarchy-theme-set-gnome pone icons.theme del tema y Adwaita claro/oscuro
+# según el modo antes de que corran los hooks; aquí se reaplica lo elegido en
+# el panel Pantalla (guardado en ~/.config/julss/appearance.json).
+"$HOME/.local/bin/julss-appearance" apply

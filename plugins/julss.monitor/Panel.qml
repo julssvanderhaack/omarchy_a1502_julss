@@ -27,6 +27,11 @@ Panel {
   property var displays: []
   property int enabledDisplayCount: 0
 
+  // julss: apariencia (tema, fondo, paleta GTK, iconos, cursor) vía
+  // ~/.local/bin/julss-appearance, que devuelve opciones y valores en JSON.
+  property var appearance: ({})
+  property bool appearanceBusy: false
+
   // Carry sub-notch touchpad deltas between wheel events.
   property real wheelAccumulator: 0
 
@@ -238,6 +243,20 @@ Panel {
 
   function refresh() {
     if (!stateProc.running) stateProc.running = true
+    refreshAppearance()
+  }
+
+  function refreshAppearance() {
+    if (!appearanceProc.running) appearanceProc.running = true
+  }
+
+  function setAppearance(key, value) {
+    if (!value || value === root.appearance[key]) return
+    var cmd = ["julss-appearance", "set", key, value]
+    if (appearanceSetProc.running) { Quickshell.execDetached(cmd); return }
+    root.appearanceBusy = true
+    appearanceSetProc.command = cmd
+    appearanceSetProc.running = true
   }
 
   function setBrightness(value) {
@@ -411,6 +430,32 @@ Panel {
     }
   }
 
+  Process {
+    id: appearanceProc
+    command: ["julss-appearance", "state"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try { root.appearance = JSON.parse(String(text || "{}")) } catch (e) { return }
+        // Dropdown rompe su binding de value al elegir; se reasigna a mano.
+        themeDropdown.value = root.appearance.theme || ""
+        bgDropdown.value = root.appearance.bg || ""
+        gtkDropdown.value = root.appearance.gtk || ""
+        iconsDropdown.value = root.appearance.icons || ""
+        cursorDropdown.value = root.appearance.cursor || ""
+      }
+    }
+  }
+
+  Process {
+    id: appearanceSetProc
+    stdout: StdioCollector { waitForEnd: true }
+    onRunningChanged: if (!running) {
+      root.appearanceBusy = false
+      root.refreshAppearance()
+    }
+  }
+
   Timer {
     id: brightnessDebounce
     interval: 180
@@ -499,7 +544,7 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(380))
-    contentHeight: panel.fittedContentHeight(panelColumn.implicitHeight, Style.space(560))
+    contentHeight: panel.fittedContentHeight(panelColumn.implicitHeight, Style.space(720))
 
     PanelKeyCatcher {
       id: keyCatcher
@@ -800,6 +845,49 @@ Panel {
             }
           }
 
+          // ---------- Apariencia (julss) ----------
+          PanelSeparator {
+            foreground: root.bar.foreground
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(10)
+
+            Item {
+              width: parent.width
+              implicitHeight: appearanceHeader.implicitHeight
+
+              PanelSectionHeader {
+                id: appearanceHeader
+                text: "APARIENCIA"
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Text {
+                textFormat: Text.PlainText
+                text: "APLICANDO…"
+                visible: root.appearanceBusy
+                color: Qt.darker(root.bar.foreground, 1.4)
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.caption
+                font.bold: true
+                anchors.right: parent.right
+                anchors.rightMargin: Style.space(6)
+                anchors.verticalCenter: parent.verticalCenter
+              }
+            }
+
+            AppearanceDropdown { id: themeDropdown; label: "Tema de Omarchy"; key: "theme"; options: root.appearance.themes || [] }
+            AppearanceDropdown { id: bgDropdown; label: "Fondo de pantalla"; key: "bg"; options: root.appearance.bgs || [] }
+            AppearanceDropdown { id: gtkDropdown; label: "Tema GTK"; key: "gtk"; options: root.appearance.gtks || [] }
+            AppearanceDropdown { id: iconsDropdown; label: "Iconos"; key: "icons"; options: root.appearance.iconThemes || [] }
+            AppearanceDropdown { id: cursorDropdown; label: "Cursor"; key: "cursor"; options: root.appearance.cursors || [] }
+          }
+
           // ---------- Monitors ----------
           PanelSeparator {
             visible: root.displays.length > 1
@@ -854,6 +942,14 @@ Panel {
         }
       }
     }
+  }
+
+  component AppearanceDropdown: Dropdown {
+    required property string key
+    width: panelColumn.width
+    foreground: root.bar.foreground
+    fontFamily: root.bar.fontFamily
+    onChanged: function(v) { root.setAppearance(key, v) }
   }
 
   component ScalePill: Button {

@@ -33,8 +33,6 @@ for f in "$REPO_DIR"/bin/*; do
   backup_and_copy "$f" "$HOME/.local/bin/$(basename "$f")"
 done
 
-# Hook theme-set: recolorea GTK con la paleta del tema (bin/julss-gtk-theme-colors)
-backup_and_copy "$REPO_DIR/omarchy/hooks/theme-set.d/julss-gtk-colors" "$CONFIG_DIR/omarchy/hooks/theme-set.d/julss-gtk-colors"
 
 # Cursor Bibata Modern Ice en ~/.local/share/icons (hypr/hyprland.lua lo usa)
 if [[ ! -d $HOME/.local/share/icons/Bibata-Modern-Ice ]]; then
@@ -47,7 +45,7 @@ if [[ ! -d $HOME/.local/share/icons/Bibata-Modern-Ice ]]; then
   rm -rf "$tmp"
 fi
 gsettings set org.gnome.desktop.interface cursor-theme Bibata-Modern-Ice 2>/dev/null || true
-"$HOME/.local/bin/julss-gtk-theme-colors" 2>/dev/null || true
+"$HOME/.local/bin/julss-appearance" apply 2>/dev/null || true
 
 # Iconos Papirus-Dark con carpetas cian (el hook julss-icons lo mantiene al cambiar de tema)
 backup_and_copy "$REPO_DIR/omarchy/hooks/theme-set.d/julss-icons" "$CONFIG_DIR/omarchy/hooks/theme-set.d/julss-icons"

@@ -1,3 +1,0 @@
-#!/bin/bash
-# Recolorea GTK con la paleta del tema recién aplicado.
-"$HOME/.local/bin/julss-gtk-theme-colors"

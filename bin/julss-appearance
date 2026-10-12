@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+# Apariencia para el panel Pantalla (julss.monitor): lista y aplica tema de
+# Omarchy, fondo, paleta GTK, iconos y cursor. GTK/iconos/cursor se guardan en
+# ~/.config/julss/appearance.json y el hook theme-set.d/julss-icons los
+# reaplica tras cada cambio de tema (Omarchy los pisa antes de los hooks).
+#
+#   julss-appearance state                 JSON con opciones y valores actuales
+#   julss-appearance set theme|bg|gtk|icons|cursor VALOR
+#   julss-appearance apply                 reaplica gtk/iconos/cursor guardados
+import json, os, re, subprocess, sys
+from pathlib import Path
+
+HOME = Path.home()
+CONF = HOME / ".config/julss/appearance.json"
+STATE = HOME / ".local/state/omarchy/current"
+SYS_THEMES = Path(os.environ.get("OMARCHY_PATH", "/usr/share/omarchy")) / "themes"
+USER_THEMES = HOME / ".config/omarchy/themes"
+ICON_DIRS = [HOME / ".local/share/icons", HOME / ".icons", Path("/usr/share/icons")]
+IMG = {".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp"}
+DEFAULTS = {"gtk": "hackerman", "icons": "Papirus-Dark-Hackerman-Mint", "cursor": "Bibata-Modern-Ice"}
+HYPR = HOME / ".config/hypr/hyprland.lua"
+
+
+def run(*cmd):
+    return subprocess.run(cmd, capture_output=True, text=True).stdout.strip()
+
+
+def load():
+    try:
+        return {**DEFAULTS, **json.loads(CONF.read_text())}
+    except Exception:
+        return dict(DEFAULTS)
+
+
+def save(conf):
+    CONF.parent.mkdir(parents=True, exist_ok=True)
+    CONF.write_text(json.dumps(conf, indent=2) + "\n")
+
+
+def pretty(slug):
+    return " ".join(w[:1].upper() + w[1:] for w in slug.split("-"))
+
+
+def theme_slugs():
+    names = set()
+    for d in (USER_THEMES, SYS_THEMES):
+        if d.is_dir():
+            names |= {p.name for p in d.iterdir() if p.is_dir()}
+    return sorted(names)
+
+
+def theme_colors(slug):
+    for d in (USER_THEMES, SYS_THEMES):
+        f = d / slug / "colors.toml"
+        if f.is_file():
+            return f
+    return None
+
+
+def is_light(colors):
+    return run("omarchy-theme-color", "--file", str(colors), "mode") == "light"
+
+
+def backgrounds():
+    name = (STATE / "theme.name").read_text().strip() if (STATE / "theme.name").exists() else ""
+    files = []
+    for d in (HOME / ".config/omarchy/backgrounds" / name, STATE / "theme/backgrounds"):
+        if d.is_dir():
+            files += [p for p in d.iterdir() if p.is_file() and p.suffix.lower() in IMG]
+    out, seen = [], set()
+    for p in sorted(files, key=lambda p: p.name):
+        real = str(p.resolve())
+        if real in seen:
+            continue
+        seen.add(real)
+        label = re.sub(r"^\d+-", "", p.stem).replace("-", " ").replace("_", " ")
+        out.append({"value": real, "label": label[:1].upper() + label[1:]})
+    return out
+
+
+def icon_themes(cursors):
+    found = {}
+    for base in ICON_DIRS:
+        if not base.is_dir():
+            continue
+        for d in sorted(base.iterdir()):
+            if d.name in ("default", "hicolor", "locolor") or d.name in found or not d.is_dir():
+                continue
+            has_cursors = (d / "cursors").is_dir()
+            has_icons = any(c.is_dir() and c.name != "cursors" for c in d.iterdir())
+            if (cursors and has_cursors) or (not cursors and has_icons and (d / "index.theme").exists()):
+                found[d.name] = d.name
+    return [{"value": k, "label": k.replace("-", " ")} for k in sorted(found, key=str.lower)]
+
+
+def gtk_options():
+    opts = [{"value": "adwaita", "label": "Adwaita oscuro (sin colores)"},
+            {"value": "adwaita-light", "label": "Adwaita claro (sin colores)"}]
+    for s in theme_slugs():
+        if theme_colors(s):
+            opts.append({"value": s, "label": "Colores " + pretty(s)})
+    return opts
+
+
+def apply_gtk(value):
+    gs = ["gsettings", "set", "org.gnome.desktop.interface"]
+    light = value == "adwaita-light"
+    if value.startswith("adwaita"):
+        for v in ("3.0", "4.0"):
+            f = HOME / f".config/gtk-{v}/gtk.css"
+            if f.exists() and "julss-gtk-theme-colors" in f.read_text().split("\n", 1)[0]:
+                f.unlink()
+    else:
+        colors = theme_colors(value)
+        if not colors:
+            return
+        light = is_light(colors)
+        subprocess.run(["julss-gtk-theme-colors", str(colors)])
+    subprocess.run(gs + ["color-scheme", "prefer-light" if light else "prefer-dark"])
+    # Cambiar gtk-theme obliga a GTK3/GTK4 a recargar estilos (y gtk.css) en caliente.
+    subprocess.run(gs + ["gtk-theme", "julss-recarga"])
+    subprocess.run(gs + ["gtk-theme", "Adwaita" if light else "Adwaita-dark"])
+
+
+def restart_gtk_apps():
+    # libadwaita carga gtk.css solo al arrancar: se reabre Nautilus para que
+    # la paleta nueva se vea ya. Otras apps GTK abiertas la toman al reabrirlas.
+    if subprocess.run(["pgrep", "-x", "nautilus"], capture_output=True).returncode == 0:
+        subprocess.run(["nautilus", "-q"], capture_output=True)
+        subprocess.run(["hyprctl", "dispatch", 'hl.dsp.exec_cmd("nautilus --new-window")'], capture_output=True)
+
+
+def apply_icons(value):
+    if not any((d / value).is_dir() for d in ICON_DIRS):
+        return
+    subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "icon-theme", value])
+
+
+def apply_cursor(value):
+    subprocess.run(["gsettings", "set", "org.gnome.desktop.interface", "cursor-theme", value])
+    subprocess.run(["hyprctl", "setcursor", value, "24"], capture_output=True)
+    idx = HOME / ".local/share/icons/default/index.theme"
+    idx.parent.mkdir(parents=True, exist_ok=True)
+    idx.write_text(f"[Icon Theme]\nInherits={value}\n")
+    if HYPR.exists():
+        s = HYPR.read_text()
+        n = re.sub(r'(hl\.env\("(?:X|HYPR)CURSOR_THEME",\s*")[^"]*(")', lambda m: m.group(1) + value + m.group(2), s)
+        if n != s:
+            HYPR.write_text(n)
+
+
+def apply(conf):
+    apply_gtk(conf["gtk"])
+    apply_icons(conf["icons"])
+    apply_cursor(conf["cursor"])
+
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else "state"
+    conf = load()
+    if cmd == "state":
+        cur_bg = os.path.realpath(STATE / "background")
+        cur_theme = (STATE / "theme.name").read_text().strip() if (STATE / "theme.name").exists() else ""
+        print(json.dumps({
+            "theme": cur_theme, "themes": [{"value": s, "label": pretty(s)} for s in theme_slugs()],
+            "bg": cur_bg, "bgs": backgrounds(),
+            "gtk": conf["gtk"], "gtks": gtk_options(),
+            "icons": conf["icons"], "iconThemes": icon_themes(False),
+            "cursor": conf["cursor"], "cursors": icon_themes(True),
+        }))
+    elif cmd == "apply":
+        apply(conf)
+    elif cmd == "set" and len(sys.argv) == 4:
+        key, value = sys.argv[2], sys.argv[3]
+        if key == "theme":
+            subprocess.run(["omarchy-theme-set", value])
+        elif key == "bg":
+            subprocess.run(["omarchy-theme-bg-set", value])
+        elif key in ("gtk", "icons", "cursor"):
+            conf[key] = value
+            save(conf)
+            {"gtk": apply_gtk, "icons": apply_icons, "cursor": apply_cursor}[key](value)
+            if key == "gtk":
+                restart_gtk_apps()
+        else:
+            sys.exit(f"clave desconocida: {key}")
+    else:
+        sys.exit("uso: julss-appearance state | apply | set CLAVE VALOR")
+
+
+main()

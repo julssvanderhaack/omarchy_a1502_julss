@@ -1,11 +1,11 @@
 #!/bin/bash
 # Recolorea GTK3/GTK4 (libadwaita) con la paleta del tema actual de Omarchy.
 # Escribe ~/.config/gtk-{3,4}.0/gtk.css a partir de
-# ~/.local/state/omarchy/current/theme/colors.toml. Lo llama el hook
-# theme-set, así que sigue al tema al cambiarlo. Para quitarlo: borrar
-# esos dos gtk.css (y el hook julss-gtk-colors).
+# un colors.toml (por defecto el del tema actual de Omarchy). Lo usa
+# julss-appearance para fijar la paleta GTK elegida en el panel Pantalla.
+# Uso: julss-gtk-theme-colors [colors.toml]
 
-colors="$HOME/.local/state/omarchy/current/theme/colors.toml"
+colors="${1:-$HOME/.local/state/omarchy/current/theme/colors.toml}"
 [[ -f $colors ]] || exit 0
 
 get() { # clave [respaldo]
@@ -25,7 +25,7 @@ red=$(get red "#e01b24")
 green=$(get green "#2ec27e")
 yellow=$(get yellow "#e5a50a")
 
-marker="/* julss-gtk-theme-colors: generado, se sobrescribe al cambiar de tema */"
+marker="/* julss-gtk-theme-colors: generado por julss-appearance */"
 
 css() {
   cat <<CSS
@@ -152,7 +152,7 @@ for v in 3.0 4.0; do
   file="$dir/gtk.css"
   mkdir -p "$dir"
   # No pisar un gtk.css hecho a mano: se guarda una copia una vez.
-  if [[ -f $file ]] && ! head -n1 "$file" | grep -qF "$marker"; then
+  if [[ -f $file ]] && ! head -n1 "$file" | grep -qF "julss-gtk-theme-colors"; then
     cp "$file" "$file.bak.$(date +%s)"
   fi
   { css; if [[ $v == 3.0 ]]; then gtk3_extra; else gtk4_extra; fi; } >"$file"
