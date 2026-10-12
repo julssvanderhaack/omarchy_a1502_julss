@@ -18,6 +18,12 @@
 #                                          (la shell lo vigila y gana al tema);
 #                                          el color vuelve al del tema en cada
 #                                          cambio de tema, la transparencia no
+#   julss-appearance set foot-transparency 0-100
+#                                          alpha de foot (foot.ini) y en vivo
+#                                          por OSC 11 a las terminales abiertas
+#   julss-appearance set win-active|win-inactive 0-100
+#                                          opacidad de ventanas (reglas de
+#                                          opacity en hypr/looknfeel.lua)
 #   julss-appearance open-bg-dir           abre (creándola) la carpeta de fondos
 #                                          extra del tema actual
 import json, os, re, subprocess, sys
@@ -34,6 +40,10 @@ DEFAULTS = {"gtk": "hackerman", "icons": "Papirus-Dark-Hackerman-Mint", "cursor"
 HYPR = HOME / ".config/hypr/hyprland.lua"
 USER_SHELL = HOME / ".config/omarchy/shell.toml"
 SHELL_JSON = HOME / ".config/omarchy/shell.json"
+FOOT_INI = HOME / ".config/foot/foot.ini"
+LOOKNFEEL = HOME / ".config/hypr/looknfeel.lua"
+# Reglas de looknfeel.lua cuya opacidad se controla ("activa inactiva").
+OPACITY_RULE = re.compile(r'^(o\.window\(\{ tag = "(?:default-opacity|chromium-based-browser|firefox-based-browser)" \}, \{ opacity = ")([0-9.]+) ([0-9.]+)(" \}\))', re.M)
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
 
 
@@ -217,7 +227,7 @@ def toml_set(path, section, key, value):
                 out.append("")
             out += [f"[{section}]", f"{key} = {value}"]
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(".tmp")
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
     tmp.write_text("\n".join(out).rstrip() + "\n")
     os.replace(tmp, path)
 
@@ -272,10 +282,78 @@ def bar_state():
         "barColor": custom.lower() if custom and HEX.match(custom) else "",
         "themeBarColor": theme_bar_color(),
         "barSwatches": swatches,
+        "footTransparency": alpha_to_pct(foot_alpha()),
+        "winActiveTransparency": alpha_to_pct(window_opacity()[0]),
+        "winInactiveTransparency": alpha_to_pct(window_opacity()[1]),
     }
 
 
+def pct_to_alpha(value):
+    return 1 - max(0, min(100, int(float(value)))) / 100
+
+
+def alpha_to_pct(alpha):
+    return round((1 - max(0.0, min(1.0, alpha))) * 100)
+
+
+def window_opacity():
+    m = OPACITY_RULE.search(LOOKNFEEL.read_text()) if LOOKNFEEL.exists() else None
+    return (float(m.group(2)), float(m.group(3))) if m else (1.0, 1.0)
+
+
+def set_window_opacity(active=None, inactive=None):
+    cur_a, cur_i = window_opacity()
+    a = cur_a if active is None else active
+    i = cur_i if inactive is None else inactive
+    s = LOOKNFEEL.read_text()
+    # Hyprland recarga solo al guardar y reaplica las reglas a las ventanas.
+    n = OPACITY_RULE.sub(lambda m: f"{m.group(1)}{a:g} {i:g}{m.group(4)}", s)
+    if n != s:
+        LOOKNFEEL.write_text(n)
+
+
+def foot_alpha():
+    for sec in ("colors-dark", "colors"):
+        v = toml_get(FOOT_INI, sec, "alpha")
+        if v:
+            try:
+                return float(v)
+            except ValueError:
+                pass
+    return 1.0
+
+
+def set_foot_alpha(alpha):
+    toml_set(FOOT_INI, "colors-dark", "alpha", f"{alpha:.2f}")
+    toml_set(FOOT_INI, "colors-light", "alpha", f"{alpha:.2f}")
+    # Terminales ya abiertas: OSC 11 con el prefijo [alpha] (extensión de foot).
+    bg = palette().get("background", "#000000")
+    seq = f"\033]11;[{round(alpha * 100)}]{bg}\033\\"
+    for pid in run("pgrep", "-x", "foot").split():
+        for child in run("pgrep", "-P", pid).split():
+            try:
+                tty = os.readlink(f"/proc/{child}/fd/0")
+            except OSError:
+                continue
+            if tty.startswith("/dev/pts/"):
+                try:
+                    with open(tty, "w") as fh:
+                        fh.write(seq)
+                except OSError:
+                    pass
+                break
+
+
 def set_bar(key, value):
+    if key == "foot-transparency":
+        set_foot_alpha(pct_to_alpha(value))
+        return
+    if key == "win-active":
+        set_window_opacity(active=pct_to_alpha(value))
+        return
+    if key == "win-inactive":
+        set_window_opacity(inactive=pct_to_alpha(value))
+        return
     if key == "bar-position":
         subprocess.run(["omarchy-bar", "position", value], capture_output=True)
     elif key == "bar-transparency":
@@ -347,7 +425,7 @@ def main():
         key, value = sys.argv[2], sys.argv[3]
         if key == "theme":
             subprocess.run(["omarchy-theme-set", value])
-        elif key.startswith("bar-"):
+        elif key.startswith(("bar-", "foot-", "win-")):
             set_bar(key, value)
         elif key == "bg":
             subprocess.run(["omarchy-theme-bg-set", value])

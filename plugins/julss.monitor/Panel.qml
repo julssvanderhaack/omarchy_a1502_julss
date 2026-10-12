@@ -265,8 +265,39 @@ Panel {
   }
 
   function setBar(key, value) {
-    Quickshell.execDetached(["julss-appearance", "set", key, String(value)])
+    // Se refleja ya en el panel; si se esperase a releer el estado, el
+    // deslizador volvería un instante al valor anterior.
+    var next = Object.assign({}, root.appearance)
+    if (key === "bar-transparency") next.barTransparency = Number(value)
+    else if (key === "bar-position") next.barPosition = value
+    else if (key === "bar-color") next.barColor = value === "theme" ? "" : value
+    else if (key === "foot-transparency") next.footTransparency = Number(value)
+    else if (key === "win-active") next.winActiveTransparency = Number(value)
+    else if (key === "win-inactive") next.winInactiveTransparency = Number(value)
+    root.appearance = next
+    // Una escritura cada vez; si llegan varias (arrastrando), solo cuenta la
+    // última de cada clave.
+    var queue = Object.assign({}, root.barPending)
+    queue[key] = String(value)
+    root.barPending = queue
+    root.runBarQueue()
     barRefresh.restart()
+  }
+
+  property var barPending: ({})
+  property bool windowSliderDragging: false
+
+  function runBarQueue() {
+    if (barSetProc.running) return
+    var keys = Object.keys(root.barPending)
+    if (!keys.length) return
+    var key = keys[0]
+    var queue = Object.assign({}, root.barPending)
+    var value = queue[key]
+    delete queue[key]
+    root.barPending = queue
+    barSetProc.command = ["julss-appearance", "set", key, value]
+    barSetProc.running = true
   }
 
   function previewBarTransparency(v) {
@@ -476,17 +507,25 @@ Panel {
     }
   }
 
+  Process {
+    id: barSetProc
+    onRunningChanged: if (!running) root.runBarQueue()
+  }
+
   Timer {
     id: barTransparencyDebounce
     interval: 120
     onTriggered: root.setBar("bar-transparency", root.barTransparencyPreview)
   }
 
-  // Relee el estado tras escribir (el cambio en sí ya se ve al momento).
+  // Relee el estado cuando se deja de tocar (el cambio en sí ya se ve al
+  // momento). Mientras se arrastra no se suelta la vista previa.
   Timer {
     id: barRefresh
-    interval: 400
+    interval: 800
     onTriggered: {
+      if (barTransparencySlider.dragging || root.windowSliderDragging || barSetProc.running
+          || Object.keys(root.barPending).length) { barRefresh.restart(); return }
       root.barTransparencyPreview = -1
       root.refreshAppearance()
     }
@@ -1143,7 +1182,27 @@ Panel {
                     AppearanceDropdown { id: cursorDropdown; label: "Cursor"; key: "cursor"; options: root.appearance.cursors || [] }
                   }
 
-                  // ---------- Monitors ----------
+                  // ---------- Ventanas (julss) ----------
+          PanelSeparator {
+            foreground: root.bar.foreground
+          }
+
+          Column {
+            width: parent.width
+            spacing: Style.space(10)
+
+            PanelSectionHeader {
+              text: "VENTANAS"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+            }
+
+            TransparencySlider { label: "Terminal foot"; key: "foot-transparency"; stateKey: "footTransparency" }
+            TransparencySlider { label: "Ventana activa"; key: "win-active"; stateKey: "winActiveTransparency" }
+            TransparencySlider { label: "Ventanas inactivas"; key: "win-inactive"; stateKey: "winInactiveTransparency" }
+          }
+
+          // ---------- Monitors ----------
                   PanelSeparator {
                     visible: root.displays.length > 1
                     foreground: root.bar.foreground
@@ -1198,6 +1257,81 @@ Panel {
             height: Style.space(4)
           }
         }
+      }
+    }
+  }
+
+  // Deslizador de transparencia 0–100 % para foot y las ventanas; escribe
+  // mientras se arrastra (con pausa corta) y al soltar.
+  component TransparencySlider: Column {
+    id: tslider
+    required property string label
+    required property string key
+    required property string stateKey
+    property int preview: -1
+    readonly property int current: preview >= 0 ? preview : (root.appearance[stateKey] || 0)
+
+    width: parent ? parent.width : 0
+    spacing: Style.space(4)
+
+    Timer {
+      id: tsliderDebounce
+      interval: 150
+      onTriggered: root.setBar(tslider.key, tslider.preview)
+    }
+
+    Connections {
+      target: root
+      function onAppearanceChanged() {
+        if (!tsliderControl.dragging && root.appearance[tslider.stateKey] === tslider.preview) tslider.preview = -1
+      }
+    }
+
+    Item {
+      width: parent.width
+      implicitHeight: tsliderLabel.implicitHeight
+
+      Text {
+        id: tsliderLabel
+        textFormat: Text.PlainText
+        text: tslider.label
+        color: Qt.darker(root.bar.foreground, 1.4)
+        font.family: root.bar.fontFamily
+        font.pixelSize: Style.font.caption
+        font.bold: true
+      }
+
+      Text {
+        anchors.right: parent.right
+        anchors.rightMargin: Style.space(6)
+        textFormat: Text.PlainText
+        text: Math.round(tsliderControl.dragging ? tsliderControl.liveValue : tslider.current) + "%"
+        color: Qt.darker(root.bar.foreground, 1.4)
+        font.family: root.bar.fontFamily
+        font.pixelSize: Style.font.caption
+        font.bold: true
+      }
+    }
+
+    PanelSlider {
+      id: tsliderControl
+      bar: root.bar
+      width: parent.width - Style.space(12)
+      x: Style.space(6)
+      minimum: 0
+      maximum: 100
+      step: 5
+      integer: true
+      value: tslider.current
+      onDraggingChanged: root.windowSliderDragging = dragging
+      onMoved: function(v) {
+        tslider.preview = Math.round(v)
+        tsliderDebounce.restart()
+      }
+      onReleased: function(v) {
+        tsliderDebounce.stop()
+        tslider.preview = Math.round(v)
+        root.setBar(tslider.key, Math.round(v))
       }
     }
   }
