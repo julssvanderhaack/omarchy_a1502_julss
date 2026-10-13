@@ -56,6 +56,32 @@ Panel {
   readonly property int age: Model.ageFromBirthYear(birthYear, today.getFullYear())
   readonly property int lifeExpectancy: Model.parseLifeExpectancy(setting("lifeExpectancy", 0))
   readonly property real lifeDone: Model.lifeProgress(age, lifeExpectancy)
+
+  // ---- julss: embarazo. Fecha probable de parto (FPP); la semana se cuenta
+  //      desde la última regla = FPP − 280 días, como en las ecografías
+  //      ("18+2" = 18 semanas cumplidas y 2 días).
+  readonly property var babyDue: new Date(2027, 2, 15)
+  readonly property var babyStart: new Date(babyDue.getFullYear(), babyDue.getMonth(), babyDue.getDate() - 280)
+  function babyDaysOn(y, m, d) {
+    return Math.round((new Date(y, m, d) - root.babyStart) / 86400000)
+  }
+  readonly property int babyDays: babyDaysOn(today.getFullYear(), today.getMonth(), today.getDate())
+  // Se muestra desde el inicio hasta dos semanas después de la FPP.
+  readonly property bool babyActive: babyDays >= 0 && babyDays <= 294
+  readonly property real babyDone: Math.max(0, Math.min(1, babyDays / 280))
+  readonly property string babyLabel: Math.floor(babyDays / 7) + "+" + (babyDays % 7)
+  readonly property int babyDaysLeft: 280 - babyDays
+  function babyWeekForRow(row) {
+    // Semana de embarazo del primer día de la fila (con semana que empieza en
+    // lunes coincide exactamente: la última regla cae en lunes).
+    var first = row.days[0]
+    var n = babyDaysOn(first.year, first.month, first.day)
+    if (n < -6 || n > 300) return ""
+    return String(Math.max(0, Math.floor(n / 7)))
+  }
+  function isBabyDue(cell) {
+    return cell.year === babyDue.getFullYear() && cell.month === babyDue.getMonth() && cell.day === babyDue.getDate()
+  }
   readonly property int lifeDonePercent: Model.lifeProgressPercent(age, lifeExpectancy)
   property bool editingLife: false
 
@@ -541,6 +567,78 @@ Panel {
             }
           }
 
+          // ---- julss: semanas de embarazo, mismo carril que el año.
+          Item {
+            visible: root.babyActive
+            width: parent.width
+            height: visible ? babyBlock.height : 0
+
+            Item {
+              id: babyBlock
+              anchors.horizontalCenter: parent.horizontalCenter
+              width: gridColumn.width
+              height: Math.max(babyLabelText.implicitHeight, Style.space(10))
+
+              Text {
+                id: babyLabelText
+                anchors.left: parent.left
+                anchors.verticalCenter: parent.verticalCenter
+                text: "BEBÉ"
+                color: Qt.darker(root.contentForeground, 1.5)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.bodySmall
+                font.letterSpacing: 1
+              }
+
+              Text {
+                id: babyWeekText
+                textFormat: Text.PlainText
+                anchors.right: parent.right
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Semana " + root.babyLabel
+                color: Color.accent
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.bodySmall
+                font.bold: true
+              }
+
+              Rectangle {
+                anchors.left: babyLabelText.right
+                anchors.right: babyWeekText.left
+                anchors.leftMargin: Style.space(12)
+                anchors.rightMargin: Style.space(12)
+                anchors.verticalCenter: parent.verticalCenter
+                height: Style.space(6)
+                radius: Style.cornerRadius > 0 ? height / 2 : 0
+                color: Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.12)
+
+                Rectangle {
+                  width: Math.round(parent.width * root.babyDone)
+                  height: parent.height
+                  radius: parent.radius
+                  color: Color.accent
+                  Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                }
+              }
+
+              MouseArea {
+                id: babyMouse
+                anchors.fill: parent
+                hoverEnabled: true
+                acceptedButtons: Qt.NoButton
+
+                PanelToolTip {
+                  visible: babyMouse.containsMouse
+                  text: (root.babyDaysLeft > 0
+                    ? "Faltan " + root.babyDaysLeft + " días"
+                    : (root.babyDaysLeft === 0 ? "¡Hoy sale de cuentas!" : "Pasado " + (-root.babyDaysLeft) + " días de la fecha"))
+                    + " · FPP " + root.labelLocale.toString(root.babyDue, "d 'de' MMMM yyyy")
+                  fontFamily: root.contentFontFamily
+                }
+              }
+            }
+          }
+
           // ---- Month grid: week numbers down a gutter on the left, then
           //      the seven day columns. Always six rows, so the popup is
           //      exactly as tall in February as it is in August.
@@ -568,6 +666,19 @@ Panel {
               Row {
                 id: headerRow
                 spacing: root.cellSpacing
+
+                // julss: cabecera de la columna de semanas de embarazo (a la izquierda de S).
+                Text {
+                  visible: root.babyActive
+                  width: root.weekColumnWidth
+                  height: Style.space(16)
+                  horizontalAlignment: Text.AlignHCenter
+                  verticalAlignment: Text.AlignVCenter
+                  text: "󰹼"
+                  color: Color.accent
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.body
+                }
 
                 // The week-number heading doubles as the week-start toggle.
                 // It is the one control in the panel whose meaning is not
@@ -640,6 +751,22 @@ Panel {
                   required property var modelData
                   spacing: root.cellSpacing
 
+
+                  // julss: semana de embarazo de la fila.
+                  Text {
+                    visible: root.babyActive
+                    textFormat: Text.PlainText
+                    width: root.weekColumnWidth
+                    height: root.cellHeight
+                    horizontalAlignment: Text.AlignHCenter
+                    verticalAlignment: Text.AlignVCenter
+                    text: root.babyWeekForRow(modelData)
+                    color: Color.accent
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.caption
+                    font.bold: true
+                  }
+
                   Text {
                     textFormat: Text.PlainText
                     width: root.weekColumnWidth
@@ -668,9 +795,11 @@ Panel {
                       radius: Style.cornerRadius
                       // Today is outlined, not filled: a lit-up block shouts
                       // over a grid this quiet.
-                      color: "transparent"
-                      border.width: modelData.today ? Style.spacing.hairline : 0
-                      border.color: Style.normalBorderFor(root.contentForeground, Color.accent)
+                      color: root.isBabyDue(modelData)
+                        ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.25)
+                        : "transparent"
+                      border.width: modelData.today || root.isBabyDue(modelData) ? Style.spacing.hairline : 0
+                      border.color: root.isBabyDue(modelData) ? Color.accent : Style.normalBorderFor(root.contentForeground, Color.accent)
 
                       Text {
                         textFormat: Text.PlainText
@@ -692,7 +821,8 @@ Panel {
             // Hairline down the week-number gutter, drawn only beside the
             // day rows so it does not cut through the header band.
             Rectangle {
-              x: gridColumn.x + root.weekColumnWidth + root.cellSpacing + Math.round((root.gutterWidth - width) / 2)
+              x: gridColumn.x + (root.babyActive ? root.weekColumnWidth + root.cellSpacing : 0)
+                + root.weekColumnWidth + root.cellSpacing + Math.round((root.gutterWidth - width) / 2)
               y: gridColumn.y + headerRow.height + gridColumn.spacing
               width: Style.spacing.hairline
               height: gridColumn.height - headerRow.height - gridColumn.spacing
