@@ -144,7 +144,8 @@ Item {
   }
 
   function updateCommand(kind, agentIds) {
-    var command = ["omarchy-agent-usage-update"]
+    // julss: el envoltorio añade copilot, gemini y opencode si están instalados.
+    var command = ["julss-agent-usage-update"]
     if (kind === "force") command.push("--force")
     if (kind === "limits") command.push("--limits-only")
     var providers = settings && settings.providers ? settings.providers : {}
@@ -217,6 +218,8 @@ Item {
   // All-time keeps a quiet day from hiding an agent; today's counts admit a
   // machine whose only source is history.jsonl, which knows nothing older.
   function providerHasData(p) {
+    // julss: un agente instalado sale aunque aún no se haya usado.
+    if (p.installed === true) return true
     return numberValue(p.totalPrompts) > 0 || numberValue(p.totalSessions) > 0
       || numberValue(p.activeDays) > 0 || numberValue(p.todayPrompts) > 0
       || numberValue(p.todaySessions) > 0 || (p.limits && p.limits.length > 0)
@@ -247,6 +250,7 @@ Item {
     return {
       providerId: String(record.id),
       providerName: String(record.name || record.id),
+      installed: record.installed === true,
       ready: record.ready === true || synced,
       usageStatusText: String(record.usageStatusText || ""),
       authHelpText: String(record.authHelpText || ""),

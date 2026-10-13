@@ -513,7 +513,10 @@ Panel {
                 required property int index
 
                 width: providerSwitch.cellWidth
-                text: modelData.providerName
+                // julss: nombre corto en la pestaña (con 5 agentes no cabe
+                // «GitHub Copilot» ni «Claude Code»); el completo va arriba.
+                text: String(modelData.providerName || "").replace(/^GitHub /, "").replace(/ Code$/, "")
+                horizontalPadding: Style.space(4)
                 selected: index === root.providerIndex
                 hasCursor: root.cursorActive && index === root.providerIndex
                 bordered: true

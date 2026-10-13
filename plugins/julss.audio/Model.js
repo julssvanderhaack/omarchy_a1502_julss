@@ -23,16 +23,16 @@ function listSnapshot(list) {
 }
 
 function outputVolumeName(volume, muted) {
-  if (muted) return "Silenciado"
+  if (muted) return "Chitón"
   var p = Math.round(volume * 100)
-  if (p === 0) return "En silencio"
-  if (p >= 100) return "Sala de conciertos"
-  if (p >= 85) return "Modo fiesta"
-  if (p >= 70) return "A tope"
-  if (p >= 50) return "Buen ritmo"
-  if (p >= 30) return "Escucha tranquila"
-  if (p >= 15) return "Murmullo"
-  return "Susurro"
+  if (p === 0) return "Modo biblioteca"
+  if (p >= 100) return "Vecinos llamando a la poli"
+  if (p >= 85) return "Fiesta en el quinto"
+  if (p >= 70) return "Molestando al vecino"
+  if (p >= 50) return "Ambiente de bar"
+  if (p >= 30) return "Volumen de oficina"
+  if (p >= 15) return "Música de ascensor"
+  return "Susurrando secretos"
 }
 
 function parseSinkAvailability(raw) {

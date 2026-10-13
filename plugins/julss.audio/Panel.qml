@@ -444,16 +444,29 @@ Panel {
   property var osdWatchSink: null
   property real osdLastVolume: -1
   property bool osdLastMuted: false
+  // Al cargar la barra o cambiar de salida PipeWire da primero 0 % y luego el
+  // valor real: durante ese rato no se muestra nada.
+  property bool osdArmed: false
+
+  Timer {
+    id: osdArmTimer
+    interval: 2000
+    onTriggered: {
+      root.osdLastVolume = Math.round(root.outputVolume * 100)
+      root.osdLastMuted = root.outputMuted
+      root.osdArmed = true
+    }
+  }
 
   function volumeChangedForOsd() {
     if (!volumeSink || !volumeSink.audio) return
     var vol = Math.round(outputVolume * 100)
-    if (osdWatchSink !== volumeSink || osdLastVolume < 0) {
+    if (osdWatchSink !== volumeSink) {
       osdWatchSink = volumeSink
-      osdLastVolume = vol
-      osdLastMuted = outputMuted
-      return
+      osdArmed = false
+      osdArmTimer.restart()
     }
+    if (!osdArmed) return
     if (vol === osdLastVolume && outputMuted === osdLastMuted) return
     osdLastVolume = vol
     osdLastMuted = outputMuted
@@ -920,6 +933,27 @@ Panel {
                 fontFamily: root.bar.fontFamily
                 anchors.left: parent.left
                 anchors.verticalCenter: parent.verticalCenter
+              }
+
+              // julss: botón visible para silenciar el micrófono (antes solo
+              // con clic derecho en el deslizador).
+              Button {
+                id: micMuteButton
+                visible: !!root.source
+                anchors.right: microphonePercent.left
+                anchors.rightMargin: Style.space(8)
+                anchors.verticalCenter: parent.verticalCenter
+                iconText: root.inputMuted ? "󰍭" : "󰍬"
+                text: root.inputMuted ? "Silenciado" : "Silenciar"
+                tooltipText: root.inputMuted ? "Activar el micrófono" : "Silenciar el micrófono"
+                fontSize: Style.font.caption
+                foreground: root.inputMuted ? "#EF5350" : root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                horizontalPadding: Style.space(8)
+                verticalPadding: Style.space(2)
+                bordered: true
+                active: root.inputMuted
+                onClicked: root.toggleInputMute()
               }
 
               Text {

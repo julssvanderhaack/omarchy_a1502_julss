@@ -20,16 +20,16 @@ Panel {
   property int phraseIndex: 0
 
   readonly property var activePhrases: [
-    "Archivando archivos",
-    "Repartiendo datos",
-    "Barajando carpetas",
-    "Empaquetando bytes",
-    "Ordenando cosas",
-    "Sincronizando secretos",
-    "Embalando paquetes",
-    "Moviendo recuerdos",
-    "Domando revisiones",
-    "Catalogando el caos"
+    "Subiendo cajas a la nube",
+    "Ordenando el trastero",
+    "Haciendo la mudanza",
+    "Doblando archivos",
+    "Archivando como un notario",
+    "Guardando por si acaso",
+    "Copiando sin chuleta",
+    "Jugando al Tetris con carpetas",
+    "Escondiendo cosas en la nube",
+    "Haciendo de mensajero"
   ]
   readonly property string heroPhraseText: activePhrases[phraseIndex % activePhrases.length]
   readonly property color foreground: bar ? bar.foreground : Color.foreground

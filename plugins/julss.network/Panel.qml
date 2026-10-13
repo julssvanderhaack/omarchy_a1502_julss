@@ -68,13 +68,14 @@ Panel {
   readonly property bool hasTransferStats: info.rx_bytes !== undefined
   property int connectionPhraseIndex: 0
   readonly property var connectionPhrases: [
-    "Cableando bits",
-    "Manejando paquetes",
-    "Ordenando tramas",
-    "Acarreando bytes",
-    "Enrutando migas",
-    "Contando colisiones",
-    "Doblando la luz",
+    "Repartiendo megas",
+    "Esquivando el lag",
+    "Señales de humo",
+    "Cola en el router",
+    "Pescando paquetes",
+    "Surfeando la red",
+    "Bits a la carrera",
+    "Paquetes con prisa"
   ]
   readonly property string connectionPhrase: connectionPhrases[connectionPhraseIndex % connectionPhrases.length]
   readonly property bool networkManagerAvailable: Networking.backend === NetworkBackendType.NetworkManager

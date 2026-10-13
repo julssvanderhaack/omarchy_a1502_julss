@@ -81,14 +81,14 @@ function availableScales(scales, width, height) {
 
 function brightnessName(percent) {
   var p = Math.round(percent)
-  if (p >= 95) return "Pleno sol"
-  if (p >= 80) return "Llamarada solar"
-  if (p >= 65) return "Hora dorada"
-  if (p >= 45) return "Día normal"
-  if (p >= 30) return "Luz suave"
-  if (p >= 20) return "Luz de lámpara"
-  if (p >= 10) return "A la luz de las velas"
-  return "Búho nocturno"
+  if (p >= 95) return "Gafas de sol obligatorias"
+  if (p >= 80) return "Quemando retinas"
+  if (p >= 65) return "Día de playa"
+  if (p >= 45) return "Brillo de andar por casa"
+  if (p >= 30) return "Luz de sobremesa"
+  if (p >= 20) return "Penumbra romántica"
+  if (p >= 10) return "Modo vampiro"
+  return "Modo topo"
 }
 
 function parseDisplays(raw) {

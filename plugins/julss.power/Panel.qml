@@ -107,26 +107,26 @@ Panel {
   // Cute agent-flavored phrases shown in the hero status line, rotated on a
   // timer so the panel feels alive when current is flowing (either direction).
   readonly property var chargingPhrases: [
-    "Bombeando energía",
-    "Inyectando electrones",
-    "Echando chispa",
-    "Amasando vatios",
-    "Acaparando julios",
-    "Sorbiendo voltios",
-    "Llenando reservas",
-    "Empapándose de amperios",
-    "Inhalando kilovatios"
+    "Merendando electrones",
+    "Chupando del enchufe",
+    "Recargando el café",
+    "Siesta con enchufe",
+    "Cogiendo fuerzas",
+    "Dándose un atracón",
+    "Repostando sin pagar",
+    "Bebiendo del enchufe",
+    "Haciendo la digestión"
   ]
   readonly property var onBatteryPhrases: [
-    "Sorbiendo energía",
-    "Gastando julios",
-    "Drenando vatios",
-    "Quemando electrones",
-    "A sorbitos",
-    "Gastando culombios",
-    "Perdiendo amperios",
-    "Tragando voltios",
-    "Mordisqueando reservas"
+    "Chupando de la pila",
+    "A dieta de vatios",
+    "Buscando un enchufe",
+    "Tirando de ahorros",
+    "Sin cargador y sin miedo",
+    "Aguantando como puede",
+    "Estirando el último julio",
+    "Rezando por un enchufe",
+    "Racionando electrones"
   ]
   property int phraseIndex: 0
 

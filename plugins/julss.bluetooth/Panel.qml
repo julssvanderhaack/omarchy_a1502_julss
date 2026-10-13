@@ -64,14 +64,14 @@ Panel {
 
   property int phraseIndex: 0
   readonly property var activePhrases: [
-    "Desenredando cables",
-    "Transmitiendo vikingos",
-    "Emparejando misterios",
-    "Pastoreando auriculares",
-    "Domando radios",
-    "Invocando altavoces",
-    "Lidiando con códecs",
-    "Puliendo paquetes"
+    "Hablando con los cascos",
+    "Ligando con altavoces",
+    "Emparejando calcetines",
+    "Buscando el otro auricular",
+    "Susurrando a los cascos",
+    "Conectando sin cables",
+    "Mandando ondas positivas",
+    "Lavándose el diente azul"
   ]
   readonly property bool rotatingPhrases: adapter && adapter.enabled
   readonly property string heroStatusText: {

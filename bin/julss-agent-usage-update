@@ -1,0 +1,41 @@
+#!/bin/bash
+# Envuelve omarchy-agent-usage-update (claude, codex, fireworks) y añade los
+# agentes que Omarchy no trae, si su CLI está instalado: copilot, gemini y
+# opencode (julss-agent-usage). Mismos argumentos: [--force] [--limits-only]
+# [--except <agente>] [agente...]. Lo usa el panel julss.agents.
+USAGE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/agents/usage"
+mkdir -p "$USAGE_DIR"
+
+omarchy-agent-usage-update "$@" &
+omarchy_pid=$!
+
+declare -A excluded
+only=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --force | --limits-only) ;;
+  --except) excluded[$2]=1; shift ;;
+  *) only+=("$1") ;;
+  esac
+  shift
+done
+
+wanted() {
+  [[ -n ${excluded[$1]} ]] && return 1
+  (( ${#only[@]} == 0 )) && return 0
+  local c; for c in "${only[@]}"; do [[ $c == "$1" ]] && return 0; done
+  return 1
+}
+
+for agent in copilot gemini opencode; do
+  wanted "$agent" || continue
+  if ! command -v "$agent" >/dev/null 2>&1; then
+    rm -f "$USAGE_DIR/$agent.json"   # desinstalado: deja de salir
+    continue
+  fi
+  record=$(julss-agent-usage "$agent") || continue
+  tmp=$(mktemp "$USAGE_DIR/.$agent.XXXXXX")
+  printf '%s\n' "$record" >"$tmp" && mv "$tmp" "$USAGE_DIR/$agent.json"
+done
+
+wait "$omarchy_pid"
