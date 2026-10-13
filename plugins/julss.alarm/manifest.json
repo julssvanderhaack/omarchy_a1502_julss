@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.alarm",
+  "name": "Alarmas",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Alarmas, cronómetro y temporizador; al saltar suena y avisa con una notificación",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "Alarmas",
+    "description": "Alarmas, cronómetro y temporizador",
+    "category": "System",
+    "allowMultiple": false
+  }
+}

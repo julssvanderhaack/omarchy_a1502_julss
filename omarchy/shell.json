@@ -15,8 +15,12 @@
             "NightLight",
             "StayAwake",
             "Webcam",
-            "KeyboardBacklight"
+            "KeyboardBacklight",
+            "Alarm"
           ]
+        },
+        {
+          "id": "julss.alarm"
         },
         {
           "id": "julss.system-update"
@@ -72,7 +76,7 @@
           "showPercentage": true
         },
         {
-          "format": "ddd d MMM HH:mm:ss",
+          "format": "HH:mm:ss",
           "formatAlt": "d 'de' MMMM 'S'ww yyyy",
           "id": "julss.clock",
           "verticalFormat": "HH\n—\nmm"

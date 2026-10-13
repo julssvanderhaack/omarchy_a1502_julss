@@ -55,6 +55,10 @@
             "value": "StayAwake",
             "label": "Stay awake",
             "description": "Idle lock and screensaver override"
+          },
+          {
+            "value": "Alarm",
+            "label": "Alarmas"
           }
         ]
       },
