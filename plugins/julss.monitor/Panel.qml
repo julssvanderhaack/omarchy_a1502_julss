@@ -1225,9 +1225,9 @@ Panel {
                       }
                     }
 
-                    AppearanceDropdown { id: gtkDropdown; label: "Tema GTK"; key: "gtk"; options: root.appearance.gtks || [] }
-                    AppearanceDropdown { id: iconsDropdown; label: "Iconos"; key: "icons"; options: root.appearance.iconThemes || [] }
-                    AppearanceDropdown { id: cursorDropdown; label: "Cursor"; key: "cursor"; options: root.appearance.cursors || [] }
+                    FolderDropdown { id: gtkDropdown; label: "Tema GTK"; key: "gtk"; folder: "gtk"; folderTip: "Abrir la carpeta de temas GTK (~/.local/share/themes)"; options: root.appearance.gtks || [] }
+                    FolderDropdown { id: iconsDropdown; label: "Iconos"; key: "icons"; folder: "icons"; folderTip: "Abrir la carpeta de iconos (~/.local/share/icons)"; options: root.appearance.iconThemes || [] }
+                    FolderDropdown { id: cursorDropdown; label: "Cursor"; key: "cursor"; folder: "cursors"; folderTip: "Abrir la carpeta de cursores (~/.local/share/icons)"; options: root.appearance.cursors || [] }
                   }
 
                   // ---------- Ventanas (julss) ----------
@@ -1422,6 +1422,53 @@ Panel {
     foreground: root.bar.foreground
     fontFamily: root.bar.fontFamily
     bordered: true
+  }
+
+  // Desplegable con etiqueta y botón para abrir la carpeta de usuario donde
+  // se instalan esos temas (julss-appearance open-dir).
+  component FolderDropdown: Column {
+    id: folderRow
+    required property string key
+    property string label: ""
+    property string folder: ""
+    property string folderTip: ""
+    property alias value: folderDropdown.value
+    property alias options: folderDropdown.options
+
+    width: rightColumn.width
+    spacing: Style.spacing.labelGap
+
+    Text {
+      textFormat: Text.PlainText
+      text: folderRow.label
+      color: Qt.darker(root.bar.foreground, 1.4)
+      font.family: root.bar.fontFamily
+      font.pixelSize: Style.font.caption
+      font.bold: true
+    }
+
+    Row {
+      width: parent.width
+      spacing: Style.spacing.xs
+
+      AppearanceDropdown {
+        id: folderDropdown
+        key: folderRow.key
+        showLabel: false
+        width: parent.width - folderButton.width - parent.spacing
+      }
+
+      PickerButton {
+        id: folderButton
+        height: folderDropdown.height
+        iconText: "󰉋"
+        tooltipText: folderRow.folderTip
+        onClicked: {
+          root.close()
+          Quickshell.execDetached(["julss-appearance", "open-dir", folderRow.folder])
+        }
+      }
+    }
   }
 
   component AppearanceDropdown: Dropdown {

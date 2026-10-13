@@ -194,6 +194,54 @@ Panel {
   }
 
 
+  // ---- Frase del día laboral de la CPU, según la carga ----
+  readonly property var moodPhrases: ({
+    "idle": ["Mirando el techo", "En la pausa del café", "Fingiendo que trabaja",
+             "Modo funcionario", "Durmiendo en idle",
+             "Contando ciclos de reloj"],
+    "light": ["Trabajando sin prisa", "Cerrando tickets",
+              "Calentando la caché", "Moviendo bits sin ganas"],
+    "medium": ["Sudando la gota", "Horas extra sin pagar", "Pidiendo un aumento",
+               "Currando de verdad"],
+    "heavy": ["Explotado como un becario", "Sin tiempo ni para el café", "Pide más núcleos",
+              "Haciendo turno doble"],
+    "critical": ["Al borde del burnout", "Llamando al sindicato", "Quiere hacer huelga",
+                 "Todo en llamas, ¿y tú?", "Pidiendo la baja"],
+    "hot": ["Echando humo", "Pide aire acondicionado", "Friendo transistores", "Huele a silicio quemado"],
+    "ram": ["Sin memoria, como yo", "Swapeando recuerdos", "Pide más RAM por Navidad", "Se le olvida todo"]
+  })
+
+  readonly property string moodBand: {
+    if (root.cpuTempC >= 85) return "hot"
+    if (root.ramPercent >= root.alertPercent) return "ram"
+    var c = root.cpuPercent
+    if (c < 0) return "idle"
+    if (c < 10) return "idle"
+    if (c < 30) return "light"
+    if (c < 60) return "medium"
+    if (c < 85) return "heavy"
+    return "critical"
+  }
+  property string moodPhrase: ""
+
+  function pickMood() {
+    var list = root.moodPhrases[root.moodBand] || ["Trabajando"]
+    var next = list[Math.floor(Math.random() * list.length)]
+    // Evita repetir la misma frase seguida.
+    if (list.length > 1 && next === root.moodPhrase) next = list[(list.indexOf(next) + 1) % list.length]
+    root.moodPhrase = next
+  }
+
+  onMoodBandChanged: pickMood()
+  Component.onCompleted: pickMood()
+
+  Timer {
+    interval: 15000
+    running: root.opened
+    repeat: true
+    onTriggered: root.pickMood()
+  }
+
   function openBtop() {
     root.close()
     if (root.bar) root.bar.run("omarchy-launch-or-focus-tui btop")
@@ -369,12 +417,7 @@ Panel {
 
             Text {
               textFormat: Text.PlainText
-              text: {
-                var parts = ["Uso de CPU"]
-                if (root.cpuTempC >= 0) parts.push(root.cpuTempC + " °C")
-                parts.push("RAM " + root.ramPercent + " %")
-                return parts.join(" · ")
-              }
+              text: root.moodPhrase.toUpperCase()
               color: Qt.darker(root.bar.foreground, 1.4)
               font.family: root.bar.fontFamily
               font.pixelSize: Style.font.caption

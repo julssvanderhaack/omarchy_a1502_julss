@@ -24,6 +24,10 @@
 #   julss-appearance set win-active|win-inactive 0-100
 #                                          opacidad de ventanas (reglas de
 #                                          opacity en hypr/looknfeel.lua)
+#   julss-appearance open-dir gtk|icons|cursors
+#                                          abre (creándola) la carpeta de usuario
+#                                          de temas GTK (~/.local/share/themes) o
+#                                          de iconos y cursores (~/.local/share/icons)
 #   julss-appearance open-bg-dir           abre (creándola) la carpeta de fondos
 #                                          extra del tema actual
 import json, os, re, subprocess, sys
@@ -414,6 +418,14 @@ def main():
         apply(conf)
         # El color de barra elegido a mano no debe tapar el del tema nuevo.
         toml_set(USER_SHELL, "bar", "background", None)
+    elif cmd == "open-dir" and len(sys.argv) == 3:
+        dirs = {"gtk": HOME / ".local/share/themes", "icons": HOME / ".local/share/icons",
+                "cursors": HOME / ".local/share/icons"}
+        d = dirs.get(sys.argv[2])
+        if not d:
+            sys.exit("uso: julss-appearance open-dir gtk|icons|cursors")
+        d.mkdir(parents=True, exist_ok=True)
+        subprocess.Popen(["gio", "open", str(d)], start_new_session=True)
     elif cmd == "open-bg-dir":
         name = (STATE / "theme.name").read_text().strip() if (STATE / "theme.name").exists() else ""
         if not name:

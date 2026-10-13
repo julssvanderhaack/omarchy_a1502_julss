@@ -199,6 +199,52 @@ Panel {
     function togglePercentage() { root.togglePercentage() }
   }
 
+  // ---- julss: histórico de carga (UPower GetHistory por D-Bus) ----
+  // Puntos {t, v, s}: hora (s), % y estado UPower (1 cargando, 2 descargando,
+  // 4 cargada). UPower ya guarda el histórico, aunque la shell no corriera.
+  readonly property var historyRanges: [3, 6, 12, 24]
+  property int historyHours: 6
+  property var historyPoints: []
+
+  function refreshHistory() {
+    if (historyProc.running) return
+    historyProc.command = ["bash", "-c",
+      "dev=$(upower -e | grep -m1 /battery_); [ -n \"$dev\" ] && gdbus call --system " +
+      "--dest org.freedesktop.UPower --object-path \"$dev\" " +
+      "--method org.freedesktop.UPower.Device.GetHistory charge " + (root.historyHours * 3600) + " 150"]
+    historyProc.running = true
+  }
+
+  function parseHistory(raw) {
+    var re = /\((?:uint32 )?(\d+), ([\d.]+), (?:uint32 )?(\d+)\)/g
+    var pts = [], m
+    while ((m = re.exec(String(raw || ""))) !== null)
+      pts.push({ t: Number(m[1]), v: Number(m[2]), s: Number(m[3]) })
+    pts.sort(function(a, b) { return a.t - b.t })
+    // UPower solo apunta cambios: se añade el valor actual para que la línea
+    // llegue hasta «ahora».
+    if (root.batteryPresent)
+      pts.push({ t: Date.now() / 1000, v: root.batteryPercent, s: root.charging ? 1 : 2 })
+    root.historyPoints = pts
+  }
+
+  Process {
+    id: historyProc
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: root.parseHistory(text)
+    }
+  }
+
+  Timer {
+    interval: 60000
+    running: root.opened
+    repeat: true
+    onTriggered: root.refreshHistory()
+  }
+
+  onHistoryHoursChanged: refreshHistory()
+
   onOpenedChanged: {
     if (opened) {
       if (!batteryPresent) {
@@ -207,6 +253,7 @@ Panel {
       }
 
       refresh()
+      refreshHistory()
       var idx = profiles.indexOf(activeProfile)
       profileIndex = idx >= 0 ? idx : 0
       cursorActive = false
@@ -542,6 +589,76 @@ Panel {
           }
         }
 
+        // ---------- Histórico de carga (julss) ----------
+        PanelSeparator {
+          foreground: root.bar.foreground
+        }
+
+        Column {
+          width: parent.width
+          spacing: Style.space(8)
+
+          Item {
+            width: parent.width
+            implicitHeight: Math.max(historyHeader.implicitHeight, rangeRow.implicitHeight)
+
+            PanelSectionHeader {
+              id: historyHeader
+              text: "HISTÓRICO DE CARGA"
+              foreground: root.bar.foreground
+              fontFamily: root.bar.fontFamily
+              anchors.left: parent.left
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
+            Row {
+              id: rangeRow
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              spacing: Style.space(4)
+
+              Repeater {
+                model: root.historyRanges
+
+                Button {
+                  required property var modelData
+                  text: modelData + " h"
+                  fontSize: Style.font.caption
+                  foreground: root.bar.foreground
+                  fontFamily: root.bar.fontFamily
+                  horizontalPadding: Style.space(6)
+                  verticalPadding: Style.space(2)
+                  bordered: true
+                  active: root.historyHours === modelData
+                  onClicked: root.historyHours = modelData
+                }
+              }
+            }
+          }
+
+          HistoryChart {
+            width: parent.width
+            height: Style.space(110)
+          }
+
+          // Leyenda.
+          Row {
+            spacing: Style.space(14)
+
+            Row {
+              spacing: Style.space(6)
+              Rectangle { anchors.verticalCenter: parent.verticalCenter; width: Style.space(8); height: width; radius: width / 2; color: Color.accent }
+              InfoLabel { text: "Cargando" }
+            }
+
+            Row {
+              spacing: Style.space(6)
+              Rectangle { anchors.verticalCenter: parent.verticalCenter; width: Style.space(8); height: width; radius: width / 2; color: root.bar.foreground }
+              InfoLabel { text: "Con batería" }
+            }
+          }
+        }
+
         // ---------- Power profile picker ----------
         PanelSeparator {
           foreground: root.bar.foreground
@@ -596,6 +713,130 @@ Panel {
           }
         }
       }
+    }
+  }
+
+  // Gráfica de área del % de batería en el rango elegido: eje X = tiempo
+  // (de hace N h a ahora), guías al 0/50/100 %, tramos cargando en acento.
+  component HistoryChart: Item {
+    id: chart
+    readonly property real labelWidth: Style.space(30)
+    readonly property real axisHeight: Style.space(14)
+
+    // Guías horizontales y su etiqueta.
+    Repeater {
+      model: [100, 50, 0]
+
+      Item {
+        required property var modelData
+        x: 0
+        width: chart.width
+        y: (chart.height - chart.axisHeight) * (1 - modelData / 100)
+
+        Rectangle {
+          x: chart.labelWidth
+          width: chart.width - chart.labelWidth
+          height: 1
+          color: Qt.rgba(root.bar.foreground.r, root.bar.foreground.g, root.bar.foreground.b, 0.12)
+        }
+
+        Text {
+          anchors.verticalCenter: parent.top
+          textFormat: Text.PlainText
+          text: parent.modelData + "%"
+          color: root.bar.foreground
+          opacity: 0.5
+          font.family: root.bar.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+      }
+    }
+
+    Canvas {
+      id: plot
+      x: chart.labelWidth
+      width: chart.width - chart.labelWidth
+      height: chart.height - chart.axisHeight
+      renderStrategy: Canvas.Cooperative
+
+      property var points: root.historyPoints
+      property color fg: root.bar.foreground
+      property color accent: Color.accent
+      onPointsChanged: requestPaint()
+      onFgChanged: requestPaint()
+      onAccentChanged: requestPaint()
+      onWidthChanged: requestPaint()
+
+      onPaint: {
+        var ctx = getContext("2d")
+        ctx.reset()
+        var pts = points || []
+        if (pts.length < 2) return
+        var now = Date.now() / 1000
+        var span = root.historyHours * 3600
+        var px = function(t) { return Math.max(0, Math.min(width, width * (1 - (now - t) / span))) }
+        var py = function(v) { return height * (1 - Math.max(0, Math.min(100, v)) / 100) }
+        // Un tramo por cada cambio de estado (cargando / con batería).
+        var seg = [pts[0]]
+        var flush = function() {
+          if (seg.length < 2) return
+          var charging = seg[seg.length - 1].s === 1 || seg[seg.length - 1].s === 4
+          var c = charging ? accent : fg
+          ctx.beginPath()
+          ctx.moveTo(px(seg[0].t), height)
+          for (var i = 0; i < seg.length; i++) ctx.lineTo(px(seg[i].t), py(seg[i].v))
+          ctx.lineTo(px(seg[seg.length - 1].t), height)
+          ctx.closePath()
+          ctx.fillStyle = Qt.rgba(c.r, c.g, c.b, 0.18)
+          ctx.fill()
+          ctx.beginPath()
+          for (var j = 0; j < seg.length; j++) {
+            if (j === 0) ctx.moveTo(px(seg[j].t), py(seg[j].v))
+            else ctx.lineTo(px(seg[j].t), py(seg[j].v))
+          }
+          ctx.strokeStyle = c
+          ctx.lineWidth = 2
+          ctx.lineJoin = "round"
+          ctx.stroke()
+        }
+        for (var k = 1; k < pts.length; k++) {
+          var charging = function(p) { return p.s === 1 || p.s === 4 }
+          seg.push(pts[k])
+          if (k < pts.length - 1 && charging(pts[k]) !== charging(pts[k + 1])) {
+            flush()
+            seg = [pts[k]]
+          }
+        }
+        flush()
+      }
+    }
+
+    // Eje de tiempo: hace N h · mitad · ahora.
+    Repeater {
+      model: 3
+
+      Text {
+        required property int index
+        y: chart.height - chart.axisHeight + Style.space(2)
+        x: chart.labelWidth + (plot.width - implicitWidth) * index / 2
+        textFormat: Text.PlainText
+        text: index === 2 ? "ahora" : "-" + (root.historyHours * (2 - index) / 2) + " h"
+        color: root.bar.foreground
+        opacity: 0.5
+        font.family: root.bar.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+    }
+
+    Text {
+      anchors.centerIn: plot
+      visible: root.historyPoints.length < 2
+      textFormat: Text.PlainText
+      text: "Sin datos de UPower todavía"
+      color: root.bar.foreground
+      opacity: 0.5
+      font.family: root.bar.fontFamily
+      font.pixelSize: Style.font.caption
     }
   }
 
