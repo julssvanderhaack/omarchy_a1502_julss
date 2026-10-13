@@ -438,6 +438,38 @@ Panel {
     }))
   }
 
+  // julss: OSD instantáneo para las teclas de volumen. julss-volume solo
+  // cambia el volumen con wpctl; aquí se ve el cambio en PipeWire y se muestra
+  // el OSD sin lanzar procesos. No salta al cambiar de salida ni al cargar.
+  property var osdWatchSink: null
+  property real osdLastVolume: -1
+  property bool osdLastMuted: false
+
+  function volumeChangedForOsd() {
+    if (!volumeSink || !volumeSink.audio) return
+    var vol = Math.round(outputVolume * 100)
+    if (osdWatchSink !== volumeSink || osdLastVolume < 0) {
+      osdWatchSink = volumeSink
+      osdLastVolume = vol
+      osdLastMuted = outputMuted
+      return
+    }
+    if (vol === osdLastVolume && outputMuted === osdLastMuted) return
+    osdLastVolume = vol
+    osdLastMuted = outputMuted
+    // Con el panel abierto ya se ve el deslizador.
+    if (root.opened || !bar || !bar.shell) return
+    bar.shell.summon("omarchy.osd", JSON.stringify({
+      icon: outputMuted || vol === 0 ? "volume-muted" : "volume-high",
+      value: String(vol),
+      progressText: vol + "%"
+    }))
+  }
+
+  onOutputVolumeChanged: volumeChangedForOsd()
+  onOutputMutedChanged: volumeChangedForOsd()
+  onVolumeSinkChanged: volumeChangedForOsd()
+
   function setInputVolume(v) {
     if (!source || !source.audio) return
     source.audio.volume = Math.max(0, Math.min(1, v))

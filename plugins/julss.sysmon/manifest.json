@@ -4,16 +4,16 @@
   "name": "Monitor",
   "version": "1.0.0",
   "author": "julss",
-  "description": "Uso de CPU y RAM en la barra, leyendo /proc sin lanzar procesos",
+  "description": "CPU y RAM en la barra; clic: panel con CPU, núcleos, memoria, swap, ventilador y disco; clic derecho: btop",
   "kinds": [
     "bar-widget"
   ],
   "entryPoints": {
-    "barWidget": "BarWidget.qml"
+    "barWidget": "Panel.qml"
   },
   "barWidget": {
     "displayName": "Monitor CPU/RAM",
-    "description": "Porcentaje de CPU y RAM; clic para abrir btop",
+    "description": "CPU y RAM en la barra; clic: panel con CPU, núcleos, memoria, swap, ventilador y disco; clic derecho: btop",
     "category": "System",
     "allowMultiple": false
   }

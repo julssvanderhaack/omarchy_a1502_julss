@@ -305,6 +305,13 @@ Panel {
     barTransparencyDebounce.restart()
   }
 
+  // Selectores visuales de Omarchy (con vista previa). Solo devuelven lo
+  // elegido, así que se aplica después, igual que el menú de Omarchy.
+  function openPicker(command) {
+    root.close()
+    Quickshell.execDetached(["bash", "-c", command])
+  }
+
   function openBgDir() {
     root.close()
     Quickshell.execDetached(["julss-appearance", "open-bg-dir"])
@@ -1135,7 +1142,40 @@ Panel {
                       }
                     }
 
-                    AppearanceDropdown { id: themeDropdown; label: "Tema de Omarchy"; key: "theme"; options: root.appearance.themes || [] }
+                    Column {
+                      width: parent.width
+                      spacing: Style.spacing.labelGap
+
+                      Text {
+                        textFormat: Text.PlainText
+                        text: "Tema de Omarchy"
+                        color: Qt.darker(root.bar.foreground, 1.4)
+                        font.family: root.bar.fontFamily
+                        font.pixelSize: Style.font.caption
+                        font.bold: true
+                      }
+
+                      Row {
+                        width: parent.width
+                        spacing: Style.spacing.xs
+
+                        AppearanceDropdown {
+                          id: themeDropdown
+                          key: "theme"
+                          showLabel: false
+                          options: root.appearance.themes || []
+                          width: parent.width - themePickerButton.width - parent.spacing
+                        }
+
+                        PickerButton {
+                          id: themePickerButton
+                          height: themeDropdown.height
+                          iconText: "󰏘"
+                          tooltipText: "Elegir tema con vista previa"
+                          onClicked: root.openPicker('theme=$(omarchy-theme-switcher); [[ -n $theme ]] && omarchy-theme-set "$theme"')
+                        }
+                      }
+                    }
                     // Fondo + botón para abrir ~/.config/omarchy/backgrounds/<tema>,
                     // donde van los fondos extra de ese tema.
                     Column {
@@ -1160,7 +1200,15 @@ Panel {
                           key: "bg"
                           showLabel: false
                           options: root.appearance.bgs || []
-                          width: parent.width - bgFolderButton.width - parent.spacing
+                          width: parent.width - bgPickerButton.width - bgFolderButton.width - parent.spacing * 2
+                        }
+
+                        PickerButton {
+                          id: bgPickerButton
+                          height: bgDropdown.height
+                          iconText: "󰋩"
+                          tooltipText: "Elegir fondo con vista previa"
+                          onClicked: root.openPicker('background=$(omarchy-theme-bg-switcher); [[ -n $background ]] && omarchy-theme-bg-set "$background"')
                         }
 
                         Button {
@@ -1366,6 +1414,14 @@ Panel {
       cursorShape: Qt.PointingHandCursor
       onClicked: root.setBar("bar-color", swatch.isTheme ? "theme" : swatch.swatchColor)
     }
+  }
+
+  // Botón cuadrado con icono junto a un desplegable.
+  component PickerButton: Button {
+    width: height
+    foreground: root.bar.foreground
+    fontFamily: root.bar.fontFamily
+    bordered: true
   }
 
   component AppearanceDropdown: Dropdown {

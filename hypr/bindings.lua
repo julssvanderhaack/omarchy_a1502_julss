@@ -64,3 +64,17 @@ o.bind("SUPER + A", "Claude", { tui = os.getenv("HOME") .. "/.local/share/mise/i
 -- Menú de atajos en castellano (antes: omarchy-menu-keybindings, en inglés).
 hl.unbind("SUPER + K")
 o.bind("SUPER + K", "Keybindings", "julss-menu-keybindings")
+
+-- Teclas de volumen rápidas (antes: omarchy-audio-output-volume, ~240 ms por
+-- pulsación, el OSD iba a trompicones). julss-volume solo usa wpctl y el OSD lo
+-- pinta julss.audio al ver el cambio en PipeWire.
+hl.unbind("XF86AudioRaiseVolume")
+hl.unbind("XF86AudioLowerVolume")
+hl.unbind("ALT + XF86AudioRaiseVolume")
+hl.unbind("ALT + XF86AudioLowerVolume")
+hl.unbind("XF86AudioMute")
+o.bind("XF86AudioRaiseVolume", "Subir volumen", "julss-volume raise", { locked = true, repeating = true })
+o.bind("XF86AudioLowerVolume", "Bajar volumen", "julss-volume lower", { locked = true, repeating = true })
+o.bind("ALT + XF86AudioRaiseVolume", "Subir volumen (fino)", "julss-volume +1", { locked = true, repeating = true })
+o.bind("ALT + XF86AudioLowerVolume", "Bajar volumen (fino)", "julss-volume -1", { locked = true, repeating = true })
+o.bind("XF86AudioMute", "Silenciar", "julss-volume mute-toggle", { locked = true })
