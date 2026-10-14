@@ -72,10 +72,15 @@ hl.config({
   },
 })
 
-hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace" })
 hl.gesture({ fingers = 4, direction = "horizontal", action = "workspace" })
 hl.gesture({ fingers = 4, direction = "up", action = "fullscreen" })
-hl.gesture({ fingers = 3, direction = "up", action = "fullscreen" })
 hl.gesture({ fingers = 4, direction = "down", action = function() hl.dispatch(hl.dsp.exec_cmd("omarchy-menu toggle apps")) end })
-hl.gesture({ fingers = 3, direction = "down", action = function() hl.dispatch(hl.dsp.exec_cmd("omarchy-menu")) end })
 
+-- 3 dedos: mover la ventana activa en la dirección del gesto
+for dir, d in pairs({ left = "l", right = "r", up = "u", down = "d" }) do
+  hl.gesture({ fingers = 3, direction = dir, action = function() hl.dispatch(hl.dsp.window.move({ direction = d })) end })
+end
+
+-- Pellizco de fuera a dentro (4 dedos; con 5 también entra como 4): abrir el menú de Omarchy
+-- Hyprland lo reporta como "pinchout" y el touchpad no reporta gestos de más de 4 dedos.
+hl.gesture({ fingers = 4, direction = "pinchout", action = function() hl.dispatch(hl.dsp.exec_cmd("omarchy-menu")) end })
