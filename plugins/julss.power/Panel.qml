@@ -218,8 +218,12 @@ Panel {
   function parseHistory(raw) {
     var re = /\((?:uint32 )?(\d+), ([\d.]+), (?:uint32 )?(\d+)\)/g
     var pts = [], m
-    while ((m = re.exec(String(raw || ""))) !== null)
+    while ((m = re.exec(String(raw || ""))) !== null) {
+      // Al arrancar UPower apunta a veces un 0 % con estado desconocido (0):
+      // no es real y pintaría un pico hasta abajo.
+      if (Number(m[3]) === 0 && Number(m[2]) === 0) continue
       pts.push({ t: Number(m[1]), v: Number(m[2]), s: Number(m[3]) })
+    }
     pts.sort(function(a, b) { return a.t - b.t })
     // UPower solo apunta cambios: se añade el valor actual para que la línea
     // llegue hasta «ahora».
@@ -776,12 +780,15 @@ Panel {
         var span = root.historyHours * 3600
         var px = function(t) { return Math.max(0, Math.min(width, width * (1 - (now - t) / span))) }
         var py = function(v) { return height * (1 - Math.max(0, Math.min(100, v)) / 100) }
-        // Un tramo por cada cambio de estado (cargando / con batería).
+        // Cada intervalo se clasifica por su pendiente: si el % sube, está
+        // cargando; si baja, con batería; si es llano, hereda el anterior
+        // (el primero llano usa el estado de UPower). Se agrupan los
+        // intervalos consecutivos de la misma clase en un tramo.
         var seg = [pts[0]]
+        var segCharging = pts[0].s === 1 || pts[0].s === 4
         var flush = function() {
           if (seg.length < 2) return
-          var charging = seg[seg.length - 1].s === 1 || seg[seg.length - 1].s === 4
-          var c = charging ? accent : fg
+          var c = segCharging ? accent : fg
           ctx.beginPath()
           ctx.moveTo(px(seg[0].t), height)
           for (var i = 0; i < seg.length; i++) ctx.lineTo(px(seg[i].t), py(seg[i].v))
@@ -800,12 +807,14 @@ Panel {
           ctx.stroke()
         }
         for (var k = 1; k < pts.length; k++) {
-          var charging = function(p) { return p.s === 1 || p.s === 4 }
-          seg.push(pts[k])
-          if (k < pts.length - 1 && charging(pts[k]) !== charging(pts[k + 1])) {
+          var dv = pts[k].v - pts[k - 1].v
+          var up = dv > 0 ? true : (dv < 0 ? false : segCharging)
+          if (up !== segCharging && seg.length >= 2) {
             flush()
-            seg = [pts[k]]
+            seg = [pts[k - 1]]
           }
+          segCharging = up
+          seg.push(pts[k])
         }
         flush()
       }
