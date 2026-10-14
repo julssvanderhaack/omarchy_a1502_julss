@@ -72,11 +72,12 @@ Panel {
   readonly property string babyLabel: Math.floor(babyDays / 7) + "+" + (babyDays % 7)
   readonly property int babyDaysLeft: 280 - babyDays
   function babyWeekForRow(row) {
-    // Semana de embarazo del primer día de la fila (con semana que empieza en
-    // lunes coincide exactamente: la última regla cae en lunes).
-    var first = row.days[0]
-    var n = babyDaysOn(first.year, first.month, first.day)
-    if (n < -6 || n > 300) return ""
+    // Semana de embarazo del último día de la fila (domingo). La última regla
+    // cae en martes, así que la semana cambia los martes y el domingo da la
+    // semana de la mayoría de los días de la fila (martes a domingo).
+    var last = row.days[row.days.length - 1]
+    var n = babyDaysOn(last.year, last.month, last.day)
+    if (n < 0 || n > 300) return ""
     return String(Math.max(0, Math.floor(n / 7)))
   }
   function isBabyDue(cell) {
