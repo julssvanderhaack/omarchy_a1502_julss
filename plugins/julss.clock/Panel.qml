@@ -60,7 +60,7 @@ Panel {
   // ---- julss: embarazo. Fecha probable de parto (FPP); la semana se cuenta
   //      desde la última regla = FPP − 280 días, como en las ecografías
   //      ("18+2" = 18 semanas cumplidas y 2 días).
-  readonly property var babyDue: new Date(2027, 2, 15)
+  readonly property var babyDue: new Date(2027, 2, 16)
   readonly property var babyStart: new Date(babyDue.getFullYear(), babyDue.getMonth(), babyDue.getDate() - 280)
   function babyDaysOn(y, m, d) {
     return Math.round((new Date(y, m, d) - root.babyStart) / 86400000)
