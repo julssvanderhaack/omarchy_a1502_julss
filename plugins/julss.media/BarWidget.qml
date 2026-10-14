@@ -54,7 +54,7 @@ BarWidget {
   // Ancho máximo del texto; si no cabe, se desplaza en bucle. Cada número de
   // espacio extra (6–10) ocupa Style.space(20) + 1 de separación, así que se
   // le resta para no montarse sobre los indicadores ocultos del centro.
-  property real maxLabelWidth: Style.space(380) - (lastWorkspace - 5) * Style.space(21)
+  property real maxLabelWidth: Style.space(260) - (lastWorkspace - 5) * Style.space(21)
 
   function focusPlayingApplication() {
     if (!activePlayer) return
