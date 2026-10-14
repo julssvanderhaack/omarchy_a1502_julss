@@ -211,7 +211,9 @@ Panel {
     historyProc.command = ["bash", "-c",
       "dev=$(upower -e | grep -m1 /battery_); [ -n \"$dev\" ] && gdbus call --system " +
       "--dest org.freedesktop.UPower --object-path \"$dev\" " +
-      "--method org.freedesktop.UPower.Device.GetHistory charge " + (root.historyHours * 3600) + " 150"]
+      // Siempre 48 h con buena resolución: con rangos cortos UPower se salta
+      // tramos que sí devuelve con rangos largos. El recorte se hace aquí.
+      "--method org.freedesktop.UPower.Device.GetHistory charge 172800 1000"]
     historyProc.running = true
   }
 
@@ -225,6 +227,12 @@ Panel {
       pts.push({ t: Number(m[1]), v: Number(m[2]), s: Number(m[3]) })
     }
     pts.sort(function(a, b) { return a.t - b.t })
+    // Solo el rango elegido, más el último punto anterior al borde para que
+    // la línea entre desde la izquierda en vez de empezar a mitad.
+    var from = Date.now() / 1000 - root.historyHours * 3600
+    var firstIn = 0
+    while (firstIn < pts.length && pts[firstIn].t < from) firstIn++
+    pts = pts.slice(Math.max(0, firstIn - 1))
     // UPower solo apunta cambios: se añade el valor actual para que la línea
     // llegue hasta «ahora».
     if (root.batteryPresent)
@@ -660,6 +668,7 @@ Panel {
               Rectangle { anchors.verticalCenter: parent.verticalCenter; width: Style.space(8); height: width; radius: width / 2; color: root.bar.foreground }
               InfoLabel { text: "Con batería" }
             }
+
           }
         }
 
