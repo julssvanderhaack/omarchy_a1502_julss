@@ -242,6 +242,11 @@ Panel {
     onTriggered: root.pickMood()
   }
 
+  function openDisk() {
+    root.close()
+    Quickshell.execDetached(["omarchy-shell", "shell", "summon", "julss.disk", "{}"])
+  }
+
   function openBtop() {
     root.close()
     if (root.bar) root.bar.run("omarchy-launch-or-focus-tui btop")
@@ -597,16 +602,36 @@ Panel {
             UsageBar { percent: root.fanPercent; fillColor: Color.accent }
           }
 
-          Column {
+          // Clic: panel de almacenamiento (julss.disk) con el reparto del disco.
+          Item {
             visible: root.diskPercent >= 0
             width: (parent.width - parent.spacing) / 2
-            spacing: Style.space(8)
+            implicitHeight: diskCol.implicitHeight
 
-            SectionTitle {
-              title: "DISCO"
-              detail: Math.round(root.diskUsedGiB) + " / " + Math.round(root.diskTotalGiB) + " GiB"
+            Column {
+              id: diskCol
+              width: parent.width
+              spacing: Style.space(8)
+
+              SectionTitle {
+                title: diskMouse.containsMouse ? "DISCO  󰁔" : "DISCO"
+                detail: Math.round(root.diskUsedGiB) + " / " + Math.round(root.diskTotalGiB) + " GiB"
+              }
+              UsageBar { percent: root.diskPercent; fillColor: root.usageColor(root.diskPercent) }
             }
-            UsageBar { percent: root.diskPercent; fillColor: root.usageColor(root.diskPercent) }
+
+            MouseArea {
+              id: diskMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.openDisk()
+            }
+
+            PanelToolTip {
+              visible: diskMouse.containsMouse
+              text: "Ver cómo está repartido el disco"
+            }
           }
         }
 

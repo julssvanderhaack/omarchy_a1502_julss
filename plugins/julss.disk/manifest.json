@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.disk",
+  "name": "Almacenamiento",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Reparto del espacio en disco en queso, anillos, mapa de rectángulos o árbol, navegando por las carpetas",
+  "kinds": [
+    "panel"
+  ],
+  "entryPoints": {
+    "panel": "Panel.qml"
+  }
+}

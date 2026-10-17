@@ -138,6 +138,9 @@
     },
     {
       "id": "julss.reminders"
+    },
+    {
+      "id": "julss.disk"
     }
   ],
   "version": 1
