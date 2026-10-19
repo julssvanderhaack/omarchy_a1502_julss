@@ -3,13 +3,13 @@
 #   julss-flatpak                    → pestaña Instaladas
 #   julss-flatpak FICHERO            → instalar un .flatpak / .flatpakref / .flatpakrepo
 #   julss-flatpak --updates          → pestaña Actualizaciones
-#   julss-flatpak --search TEXTO     → buscar en Flathub
+#   julss-flatpak --search [TEXTO]   → buscar en Flathub (sin texto: solo abre la pestaña)
 # Archivos (Nautilus) lo usa para abrir esos ficheros: ver julss-flatpak.desktop.
 
 case "$1" in
-  "") payload='{}' ;;
+  "") payload='{"tab":"installed"}' ;;
   --updates) payload='{"tab":"updates"}' ;;
-  --search) shift; payload=$(jq -cn --arg q "$*" '{search: $q}') ;;
+  --search) shift; if [[ -n $* ]]; then payload=$(jq -cn --arg q "$*" '{search: $q}'); else payload='{"tab":"search"}'; fi ;;
   *)
     file=$1
     [[ $file == file://* ]] && file=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.unquote(urllib.parse.urlparse(sys.argv[1]).path))' "$file")
