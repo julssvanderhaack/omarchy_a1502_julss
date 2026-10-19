@@ -967,6 +967,10 @@ Item {
     rebuildDisplay()
     invalidateVolatileProvider(activeMenu)
     loadProviderForMenu(activeMenu)
+    // Without the shared AppLibrary the app list comes from list-apps; re-read
+    // it on every open (~0.15 s, async) so apps installed since — e.g. Flatpaks
+    // from julss.flatpak — show up without restarting the shell.
+    if (!root.appLibrary && root.providersLoaded["apps"]) root.mergeOwnAppRows()
     // The shell may start before first-install packages have finished placing
     // their icons. Refresh here even when the desktop entry list did not change.
     if (root.appLibrary) root.appLibrary.refreshIcons()
@@ -1456,7 +1460,7 @@ Item {
                 sourceSize.width: width * Screen.devicePixelRatio
                 sourceSize.height: height * Screen.devicePixelRatio
                 source: row.isApp
-                  ? (root.appLibrary ? root.appLibrary.iconSource(row.appIcon) : (row.appIcon ? Quickshell.iconPath(row.appIcon, true) : ""))
+                  ? (root.appLibrary ? root.appLibrary.iconSource(row.appIcon) : (row.appIcon ? (row.appIcon.charAt(0) === "/" ? "file://" + row.appIcon : Quickshell.iconPath(row.appIcon, true)) : ""))
                   : ""
                 asynchronous: true
                 anchors.left: parent.left

@@ -41,6 +41,29 @@ def desktop_dirs():
     return ordered
 
 
+FLATPAK_EXPORTS = [
+    os.path.expanduser("~/.local/share/flatpak/exports/share"),
+    "/var/lib/flatpak/exports/share",
+]
+ICON_SIZES = ["scalable", "512x512", "256x256", "128x128", "96x96", "64x64", "48x48", "32x32"]
+
+
+def flatpak_icon(name):
+    """Absolute path for a Flatpak-exported icon.
+
+    Qt's icon theme lookup only knows the theme dirs that existed when the
+    shell started, so icons of apps installed later come up blank."""
+    if not name or name.startswith("/"):
+        return ""
+    for base in FLATPAK_EXPORTS:
+        for size in ICON_SIZES:
+            for ext in ("svg", "png"):
+                path = os.path.join(base, "icons/hicolor", size, "apps", name + "." + ext)
+                if os.path.exists(path):
+                    return path
+    return ""
+
+
 def parse_desktop_file(path):
     entry = {}
     in_main_section = False
@@ -95,13 +118,19 @@ def collect_apps():
                 continue
 
             keywords = [k for k in localized(entry, "Keywords").split(";") if k]
+            is_flatpak = "/flatpak/exports/" in path or bool(entry.get("X-Flatpak"))
+            icon = entry.get("Icon", "")
+            if is_flatpak:
+                keywords.append("flatpak")
+                icon = flatpak_icon(icon) or icon
 
             apps[app_id] = {
                 "id": app_id,
                 "name": name,
                 "genericName": localized(entry, "GenericName"),
-                "icon": entry.get("Icon", ""),
+                "icon": icon,
                 "keywords": keywords,
+                "flatpak": is_flatpak,
             }
     return list(apps.values())
 
