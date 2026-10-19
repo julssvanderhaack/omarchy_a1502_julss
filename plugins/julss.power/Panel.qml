@@ -217,6 +217,36 @@ Panel {
     historyProc.running = true
   }
 
+  // Huecos (apagado o suspendido) en los que la carga subió: UPower no apunta
+  // nada, así que se supone que cargó al ritmo máximo observado hasta llegar
+  // al valor con el que se encendió (p. ej. el 100 %) y que luego se quedó
+  // ahí, en vez de una diagonal lenta de punta a punta.
+  property real maxChargeRate: 0   // % por hora, para mostrarlo si hace falta
+  function fillChargingGaps(pts) {
+    var gapSec = 1200
+    // Ritmo: el tramo de subida más rápido de las 48 h (al menos 5 puntos de
+    // %); acotado a un rango razonable. Por defecto 45 %/h (medido aquí).
+    var rate = 0
+    for (var i = 1; i < pts.length; i++) {
+      var dv = pts[i].v - pts[i - 1].v, dt = pts[i].t - pts[i - 1].t
+      if (dv >= 5 && dt > 0) rate = Math.max(rate, dv / dt * 3600)
+    }
+    rate = rate > 0 ? Math.max(20, Math.min(120, rate)) : 45
+    root.maxChargeRate = rate
+    var out = []
+    for (var k = 0; k < pts.length; k++) {
+      if (k > 0) {
+        var a = pts[k - 1], b = pts[k]
+        if (b.t - a.t > gapSec && b.v - a.v >= 1) {
+          var reach = a.t + (b.v - a.v) / rate * 3600
+          if (reach < b.t - 60) out.push({ t: reach, v: b.v, s: 1 })
+        }
+      }
+      out.push(pts[k])
+    }
+    return out
+  }
+
   function parseHistory(raw) {
     var re = /\((?:uint32 )?(\d+), ([\d.]+), (?:uint32 )?(\d+)\)/g
     var pts = [], m
@@ -227,6 +257,7 @@ Panel {
       pts.push({ t: Number(m[1]), v: Number(m[2]), s: Number(m[3]) })
     }
     pts.sort(function(a, b) { return a.t - b.t })
+    pts = root.fillChargingGaps(pts)
     // Solo el rango elegido, más el último punto anterior al borde para que
     // la línea entre desde la izquierda en vez de empezar a mitad.
     var from = Date.now() / 1000 - root.historyHours * 3600
