@@ -85,6 +85,18 @@ backup_and_copy "$REPO_DIR/share/applications/julss-calc.desktop" "$HOME/.local/
 backup_and_copy "$REPO_DIR/share/applications/omacalc.desktop" "$HOME/.local/share/applications/omacalc.desktop"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 
+# Reproductor de música julss-music (C++/Qt6 + FFmpeg + PipeWire): compila, instala en
+# ~/.local y lo deja como aplicación por defecto para los archivos de audio
+if omarchy pkg add cmake ffmpeg; then
+  cmake -S "$REPO_DIR/apps/julss-music" -B "$REPO_DIR/apps/julss-music/build" -DCMAKE_BUILD_TYPE=Release &&
+    cmake --build "$REPO_DIR/apps/julss-music/build" -j"$(nproc)" &&
+    cmake --install "$REPO_DIR/apps/julss-music/build" --prefix "$HOME/.local" &&
+    update-desktop-database "$HOME/.local/share/applications" 2>/dev/null
+  xdg-mime default julss-music.desktop $(grep '^MimeType=' "$REPO_DIR/apps/julss-music/data/julss-music.desktop" | cut -d= -f2 | tr ';' ' ') 2>/dev/null || true
+fi
+# PipeWire a la frecuencia nativa de cada canción (sin remuestrear 44,1 kHz)
+backup_and_copy "$REPO_DIR/pipewire/10-julss-native-rates.conf" "$CONFIG_DIR/pipewire/pipewire.conf.d/10-julss-native-rates.conf"
+
 # Chromium flags (VA-API video decode)
 backup_and_copy "$REPO_DIR/chromium/chromium-flags.conf" "$CONFIG_DIR/chromium-flags.conf"
 
