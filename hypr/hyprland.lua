@@ -33,6 +33,11 @@ o.window("org.omarchy.MonitorLayout", { float = true })
 o.window("org.omarchy.MonitorLayout", { center = true })
 o.window("org.omarchy.MonitorLayout", { size = { 900, 620 } })
 
+-- Calculadora (julss-calc): flotante y centrada.
+o.window("julss-calc", { float = true })
+o.window("julss-calc", { center = true })
+o.window("julss-calc", { size = { 1080, 700 } })
+
 -- Cursor Bibata Modern Ice (blanco, borde negro fino),
 -- instalado en ~/.local/share/icons. Tamaño: el 24 de Omarchy.
 hl.env("XCURSOR_THEME", "Bibata-Modern-Ice")

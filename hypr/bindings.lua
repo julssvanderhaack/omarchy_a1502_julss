@@ -78,3 +78,10 @@ o.bind("XF86AudioLowerVolume", "Bajar volumen", "julss-volume lower", { locked =
 o.bind("ALT + XF86AudioRaiseVolume", "Subir volumen (fino)", "julss-volume +1", { locked = true, repeating = true })
 o.bind("ALT + XF86AudioLowerVolume", "Bajar volumen (fino)", "julss-volume -1", { locked = true, repeating = true })
 o.bind("XF86AudioMute", "Silenciar", "julss-volume mute-toggle", { locked = true })
+
+-- Calculadora científica propia (julss-calc, ~/src/julss-calc) en lugar de omacalc.
+-- Si ya está abierta, la enfoca en vez de abrir otra.
+hl.unbind("SUPER + CTRL + Q")
+hl.unbind("XF86Calculator")
+o.bind("SUPER + CTRL + Q", "Calculator", "omarchy-launch-or-focus julss-calc")
+o.bind("XF86Calculator", "Calculator", "omarchy-launch-or-focus julss-calc")

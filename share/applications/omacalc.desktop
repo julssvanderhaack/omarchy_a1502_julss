@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Omacalc
+GenericName=Calculator
+Comment=Dead-simple calculator
+Exec=omacalc
+NoDisplay=true
+Icon=omacalc
+Terminal=false
+Categories=Utility;Calculator;
+Keywords=calculator;calc;math;arithmetic;
+StartupWMClass=omacalc

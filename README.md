@@ -172,6 +172,33 @@ lspci -vvs 00:1c.4 | grep LnkCtl   # debe decir "ASPM L1 Enabled"
 Si algo conectado por Thunderbolt da problemas:
 `sudo systemctl disable --now thunderbolt-aspm` y reiniciar.
 
+## Calculadora científica (`apps/julss-calc`)
+
+Sustituye a `omacalc` (Super+Ctrl+Q y tecla Calculadora). Es C++17 + Qt6 Widgets,
+con [Giac](https://www-fourier.ujf-grenoble.fr/~parisse/giac.html) (paquete `giac`)
+como motor simbólico en un hilo aparte; arranca en ~0,3 s y no gasta CPU en reposo.
+
+- **Científica**: fórmulas maquetadas, vista previa, grados/radianes, cifras,
+  variables y funciones (`a = 5`, `f(x) = x²+1`, `ans`), complejos en forma
+  binómica/polar/trigonométrica/exponencial. Acepta `sen`, `tg`, `raiz`, `30°`, `sen x`.
+- **Ecuaciones**: ecuaciones (también trigonométricas con n ∈ ℤ y numéricas),
+  sistemas lineales con clasificación SCD/SCI/SI, no lineales, inecuaciones como
+  intervalos y regiones del plano con vértices, todo con gráfica.
+- **Cálculo**: derivadas (parciales), primitivas, integrales definidas y dobles,
+  límites (laterales), Taylor, sumatorios, gradiente/hessiana/puntos críticos.
+- **Gráficas**: y = f(x), implícitas, regiones, paramétricas 2D/3D, superficies
+  z = f(x,y), superficies implícitas F(x,y,z) = 0 (marching tetrahedra +
+  z-buffer propio) y funciones complejas f(z) con coloreado de dominio.
+
+`install.sh` instala `giac` y `cmake`, compila e instala en `~/.local/bin`, copia
+`share/applications/julss-calc.desktop` y un `omacalc.desktop` con
+`NoDisplay=true` (bórralo para volver a ver omacalc en el lanzador). La regla de
+ventana flotante está en `hypr/hyprland.lua` y los atajos en `hypr/bindings.lua`.
+
+Para desarrollar: `cmake -S apps/julss-calc -B apps/julss-calc/build && cmake --build apps/julss-calc/build`;
+`--target castest` compila un banco de pruebas de consola del motor
+(`./build/castest`, o `./build/castest "expr" …`).
+
 ## Flatpak
 
 Las entradas *Instalar → Flatpak* y *Desinstalar → Flatpak* del menú necesitan

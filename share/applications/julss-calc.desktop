@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Calculadora
+GenericName=Calculadora científica
+Comment=Calculadora científica con números complejos, ecuaciones, cálculo simbólico y gráficas 2D/3D
+Exec=julss-calc
+Icon=accessories-calculator
+Terminal=false
+Categories=Utility;Calculator;Education;Math;
+Keywords=calculadora;calculator;calc;matemáticas;integral;derivada;ecuación;gráfica;complejos;
+StartupWMClass=julss-calc

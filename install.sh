@@ -74,6 +74,17 @@ for m in application/vnd.flatpak application/vnd.flatpak.ref application/vnd.fla
   xdg-mime default julss-flatpak.desktop "$m" 2>/dev/null || true
 done
 
+# Calculadora científica julss-calc (C++/Qt6 + Giac): compila e instala en ~/.local,
+# la enlaza a Super+Ctrl+Q / tecla Calculadora (hypr/bindings.lua) y oculta omacalc
+if omarchy pkg add giac cmake; then
+  cmake -S "$REPO_DIR/apps/julss-calc" -B "$REPO_DIR/apps/julss-calc/build" -DCMAKE_BUILD_TYPE=Release &&
+    cmake --build "$REPO_DIR/apps/julss-calc/build" -j"$(nproc)" &&
+    cmake --install "$REPO_DIR/apps/julss-calc/build" --prefix "$HOME/.local"
+fi
+backup_and_copy "$REPO_DIR/share/applications/julss-calc.desktop" "$HOME/.local/share/applications/julss-calc.desktop"
+backup_and_copy "$REPO_DIR/share/applications/omacalc.desktop" "$HOME/.local/share/applications/omacalc.desktop"
+update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+
 # Chromium flags (VA-API video decode)
 backup_and_copy "$REPO_DIR/chromium/chromium-flags.conf" "$CONFIG_DIR/chromium-flags.conf"
 
