@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Flatpak
+GenericName=Gestor de aplicaciones Flatpak
+Comment=Instalar, actualizar y desinstalar aplicaciones Flatpak
+Keywords=flatpak;flathub;apps;aplicaciones;instalar;tienda;
+Exec=julss-flatpak %f
+Icon=package-x-generic
+MimeType=application/vnd.flatpak;application/vnd.flatpak.ref;application/vnd.flatpak.repo;
+Terminal=false
+Categories=System;PackageManager;

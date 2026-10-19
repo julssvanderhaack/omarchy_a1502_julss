@@ -76,9 +76,9 @@
           "showPercentage": true
         },
         {
+          "id": "julss.clock",
           "format": "HH:mm:ss",
           "formatAlt": "d 'de' MMMM 'S'ww yyyy",
-          "id": "julss.clock",
           "verticalFormat": "HH\n—\nmm"
         },
         {
@@ -141,6 +141,9 @@
     },
     {
       "id": "julss.disk"
+    },
+    {
+      "id": "julss.flatpak"
     }
   ],
   "version": 1

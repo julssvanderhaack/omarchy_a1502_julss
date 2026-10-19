@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.flatpak",
+  "name": "Flatpak",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Gestor de aplicaciones Flatpak: instaladas, actualizaciones, buscar en Flathub e instalar ficheros .flatpak/.flatpakref",
+  "kinds": [
+    "panel"
+  ],
+  "entryPoints": {
+    "panel": "Panel.qml"
+  }
+}

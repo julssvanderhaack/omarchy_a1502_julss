@@ -11,6 +11,7 @@ omarchy/
 ├── shell.json                  # ~/.config/omarchy/shell.json — layout de la barra
 └── extensions/omarchy-menu.jsonc  # ~/.config/omarchy/extensions/omarchy-menu.jsonc
 bin/                            # ~/.local/bin/ — scripts usados por el menú
+├── julss-flatpak               # Abre el gestor Flatpak (julss.flatpak); con un fichero, lo instala (lo usa Archivos)
 ├── julss-flatpak-install       # Instalar → Flatpak (fzf sobre Flathub)
 ├── julss-flatpak-remove        # Desinstalar → Flatpak
 └── julss-menu-keybindings     # Super+K: menú de atajos en castellano (traduce el de Omarchy con omarchy/extensions/keybindings-es.tsv)
@@ -35,6 +36,7 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.clock/                # Reloj con segundos + calendario, en castellano (locale es_ES); el panel se ensancha con meses largos
 ├── julss.lan/                  # Red local: escanea la LAN (ping + vecinos + mDNS/DNS/NetBIOS/UPnP) y lista dispositivos con nombre, IP y fabricante
 ├── julss.disk/                 # Almacenamiento: reparto del disco en queso, anillos, mapa o árbol, navegando por carpetas (clic en DISCO del monitor)
+├── julss.flatpak/              # Gestor Flatpak: instaladas (permisos, datos, desinstalar), actualizaciones, buscar en Flathub e instalar .flatpak/.flatpakref/.flatpakrepo abiertos desde Archivos
 ├── julss.menu/                 # Menú/launcher propio
 ├── julss.notifications/        # Historial + "Borrar todas", no molestar y selector de tiempo en pantalla (3/5/8/15/30 s/∞)
 ├── julss.notifications-service/ # Clon del servicio omarchy.notifications que lee ~/.local/state/omarchy/notifications-duration

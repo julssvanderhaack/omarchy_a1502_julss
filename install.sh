@@ -67,6 +67,13 @@ fi
 # julss-agent-crash: diagnosticar procesos caídos con un agente con tokens
 backup_and_copy "$REPO_DIR/share/agent-shim/omarchy-default-agent" "$HOME/.local/share/julss/agent-shim/omarchy-default-agent"
 
+# Gestor de Flatpak (julss.flatpak): abrir .flatpak/.flatpakref/.flatpakrepo desde Archivos
+backup_and_copy "$REPO_DIR/share/applications/julss-flatpak.desktop" "$HOME/.local/share/applications/julss-flatpak.desktop"
+update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
+for m in application/vnd.flatpak application/vnd.flatpak.ref application/vnd.flatpak.repo; do
+  xdg-mime default julss-flatpak.desktop "$m" 2>/dev/null || true
+done
+
 # Chromium flags (VA-API video decode)
 backup_and_copy "$REPO_DIR/chromium/chromium-flags.conf" "$CONFIG_DIR/chromium-flags.conf"
 

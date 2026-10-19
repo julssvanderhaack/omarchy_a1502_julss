@@ -1,0 +1,20 @@
+#!/bin/bash
+# Abre el gestor de Flatpak (plugin julss.flatpak del shell de Omarchy).
+#   julss-flatpak                    → pestaña Instaladas
+#   julss-flatpak FICHERO            → instalar un .flatpak / .flatpakref / .flatpakrepo
+#   julss-flatpak --updates          → pestaña Actualizaciones
+#   julss-flatpak --search TEXTO     → buscar en Flathub
+# Archivos (Nautilus) lo usa para abrir esos ficheros: ver julss-flatpak.desktop.
+
+case "$1" in
+  "") payload='{}' ;;
+  --updates) payload='{"tab":"updates"}' ;;
+  --search) shift; payload=$(jq -cn --arg q "$*" '{search: $q}') ;;
+  *)
+    file=$1
+    [[ $file == file://* ]] && file=$(python3 -c 'import sys, urllib.parse; print(urllib.parse.unquote(urllib.parse.urlparse(sys.argv[1]).path))' "$file")
+    payload=$(jq -cn --arg f "$(realpath -- "$file")" '{file: $f}')
+    ;;
+esac
+
+exec omarchy-shell shell summon julss.flatpak "$payload"
