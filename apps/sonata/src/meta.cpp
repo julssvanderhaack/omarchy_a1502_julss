@@ -114,7 +114,9 @@ QImage readCover(const QString &path)
 static const QSet<QString> kAudioExt = {
     "mp3", "flac", "ogg", "oga", "opus", "m4a", "m4b", "mp4", "aac", "alac", "wav", "wv", "ape", "aiff", "aif",
     "aifc", "wma", "mpc", "dsf", "dff", "tta", "mka", "webm", "ac3", "dts", "caf", "spx", "tak", "mp2", "amr",
-    "mod", "xm", "it", "s3m", "w64", "au", "snd", "ra", "3gp", "weba"};
+    "mod", "xm", "it", "s3m", "w64", "au", "snd", "ra", "3gp", "weba",
+    // also playable through FFmpeg (and libopenmpt for tracker modules)
+    "awb", "dtshd", "rm", "m4r", "gsm", "voc", "axa", "mp1", "mpga", "669", "med", "mo3", "mtm", "stm", "ult", "mptm"};
 
 bool isAudioFile(const QString &path)
 {
