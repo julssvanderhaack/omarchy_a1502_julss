@@ -1,0 +1,3 @@
+build/
+build-dbg/
+compile_commands.json

@@ -231,6 +231,33 @@ Ctrl+O / Ctrl+Mayús+O (añadir), Ctrl+F (buscar), Ctrl+T/W (lista), Ctrl+L / Ct
 `install.sh` compila, instala en `~/.local` y lo asocia a los tipos de audio.
 Para volver a Audacious: `xdg-mime default audacious.desktop audio/mpeg audio/flac …`.
 
+## Explorador de archivos Luna (`apps/luna`)
+
+Alternativa a Nautilus en C++17 + Qt6 Widgets, con el nombre y el icono de Luna,
+la gata siamesa. Todo en castellano y con los colores del tema activo de Omarchy.
+
+- **Vistas:** iconos, compacta, lista, lista detallada, árbol y columnas; pestañas
+  y vista dividida (F3). Barra de ruta al estilo Nautilus (botones o texto) y
+  barra lateral con lugares, marcadores GTK (los mismos que Nautilus y el
+  widget de Lugares), dispositivos (montar/expulsar) y red.
+- **Archivos:** abrir con (respeta `mimeapps.list` y lanza con `uwsm-app`),
+  mover a / copiar a, copiar y mover con progreso y conflictos, papelera
+  estándar, renombrar en lote, comprimir/extraer, enlaces.
+- **Propiedades:** permisos (casillas, octal, especiales, recursivo),
+  metadatos de audio/vídeo (libmediainfo) y fotos con EXIF/GPS (exiv2).
+- **Conectar a servidor:** SFTP/SSH, FTP, FTPS, SMB y NFS a través de GVFS.
+- **Rendimiento:** listado con `readdir`+`fstatat` en hilos aparte; búsqueda
+  recursiva con `getdents64` a prioridad mínima (≈6× menos CPU que `find`);
+  miniaturas en la caché freedesktop compartida, con vista previa EXIF al
+  instante. Arranca en ~0,35 s y no consume CPU en reposo.
+
+`install.sh` instala las dependencias, compila e instala en `~/.local`
+(lanzador «Luna» e icono). No lo pone como explorador predeterminado; para
+hacerlo: `xdg-mime default luna.desktop inode/directory`.
+
+Para desarrollar: `cmake -S apps/luna -B apps/luna/build && cmake --build apps/luna/build`.
+Ajustes en `~/.config/luna/luna.conf`.
+
 ## Flatpak
 
 Las entradas *Instalar → Flatpak* y *Desinstalar → Flatpak* del menú necesitan
