@@ -1,4 +1,4 @@
-// julss-music: local music player for Omarchy.
+// sonata: local music player for Omarchy.
 //
 // Single instance: launching it again (e.g. clicking another file in the file
 // manager) hands the files to the running window over a unix socket instead
@@ -7,6 +7,9 @@
 #include "mpris.h"
 #include "theme.h"
 #include <QApplication>
+#include <QFile>
+#include <QStandardPaths>
+#include <QDirIterator>
 #include <QDir>
 #include <QFileInfo>
 #include <QIcon>
@@ -26,7 +29,7 @@ static QByteArray socketPath()
 {
     QByteArray dir = qgetenv("XDG_RUNTIME_DIR");
     if (dir.isEmpty()) dir = "/tmp";
-    return dir + "/julss-music.sock";
+    return dir + "/sonata.sock";
 }
 
 // Plain POSIX so a second launch exits in a few ms without starting Qt GUI.
@@ -72,6 +75,26 @@ static void handleMessage(MainWindow *w, const QByteArray &msg)
     else if (show) w->raiseWindow();
 }
 
+// The player used to be called "julss-music": on the first run as Sonata,
+// copy its playlists, state, lyrics and cover cache (copy, not move, in case
+// the old version is still running and writes its state on exit).
+static void migrateFromJulssMusic()
+{
+    for (auto loc : {QStandardPaths::GenericDataLocation, QStandardPaths::GenericStateLocation, QStandardPaths::GenericCacheLocation}) {
+        const QString base = QStandardPaths::writableLocation(loc);
+        const QString from = base + "/julss-music", to = base + "/sonata";
+        if (!QFileInfo(from).isDir() || QFileInfo::exists(to)) continue;
+        QDirIterator it(from, QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden, QDirIterator::Subdirectories);
+        QDir().mkpath(to);
+        while (it.hasNext()) {
+            it.next();
+            const QString dest = to + it.filePath().mid(from.size());
+            if (it.fileInfo().isDir()) QDir().mkpath(dest);
+            else QFile::copy(it.filePath(), dest);
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     // Build the message first: absolute paths, so the running instance can
@@ -81,7 +104,7 @@ int main(int argc, char **argv)
         QString a = QString::fromLocal8Bit(argv[i]);
         if (a.startsWith("--")) {
             if (a == "--help" || a == "-h") {
-                puts("julss-music [--play] [--toggle|--next|--prev|--stop] [archivos o carpetas…]");
+                puts("sonata [--play] [--toggle|--next|--prev|--stop] [archivos o carpetas…]");
                 return 0;
             }
             msg += a.toUtf8() + '\n';
@@ -94,14 +117,15 @@ int main(int argc, char **argv)
 
     av_log_set_level(AV_LOG_ERROR);
     QApplication app(argc, argv);
-    QApplication::setApplicationName("julss-music");
-    QApplication::setApplicationDisplayName("Música");
-    QGuiApplication::setDesktopFileName("julss-music");
-    QApplication::setWindowIcon(QIcon::fromTheme("multimedia-audio-player"));
+    QApplication::setApplicationName("sonata");
+    QApplication::setApplicationDisplayName("Sonata");
+    QGuiApplication::setDesktopFileName("sonata");
+    QApplication::setWindowIcon(QIcon::fromTheme("sonata", QIcon(":/sonata.svg")));
     app.setStyle(QStyleFactory::create("Fusion"));
     Theme::get().load();
     Theme::get().apply();
 
+    migrateFromJulssMusic();
     MainWindow w;
     registerMpris(&w);
 
@@ -123,13 +147,13 @@ int main(int argc, char **argv)
     });
 
     w.show();
-    if (const QString shot = qEnvironmentVariable("JULSS_MUSIC_SHOT"); !shot.isEmpty()) {   // tests
-        const int delay = qEnvironmentVariableIntValue("JULSS_MUSIC_SHOT_DELAY");
-        if (const QStringList sz = qEnvironmentVariable("JULSS_MUSIC_SHOT_SIZE").split('x'); sz.size() == 2)
+    if (const QString shot = qEnvironmentVariable("SONATA_SHOT"); !shot.isEmpty()) {   // tests
+        const int delay = qEnvironmentVariableIntValue("SONATA_SHOT_DELAY");
+        if (const QStringList sz = qEnvironmentVariable("SONATA_SHOT_SIZE").split('x'); sz.size() == 2)
             w.resize(sz[0].toInt(), sz[1].toInt());
         QTimer::singleShot(delay ? delay : 3000, &w, [&w, shot] {
             w.grab().save(shot);
-            if (qEnvironmentVariableIsSet("JULSS_MUSIC_QUIT")) w.close();
+            if (qEnvironmentVariableIsSet("SONATA_QUIT")) w.close();
         });
     }
     // command-line commands (--toggle etc.) make no sense for a fresh window
@@ -140,8 +164,8 @@ int main(int argc, char **argv)
         else if (!line.isEmpty() && !line.startsWith("--")) files << QString::fromUtf8(line);
     }
     if (!files.isEmpty()) w.addPaths(files, playNow);
-    if (qEnvironmentVariableIsSet("JULSS_MUSIC_SEEK"))   // tests
-        QTimer::singleShot(1500, &w, [&w] { w.seekTo(qEnvironmentVariable("JULSS_MUSIC_SEEK").toDouble()); });
+    if (qEnvironmentVariableIsSet("SONATA_SEEK"))   // tests
+        QTimer::singleShot(1500, &w, [&w] { w.seekTo(qEnvironmentVariable("SONATA_SEEK").toDouble()); });
     const int rc = app.exec();
     server.close();
     ::unlink(socketPath().constData());

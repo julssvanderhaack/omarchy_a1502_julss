@@ -8,6 +8,7 @@
 
 class QLabel;
 class QLineEdit;
+class QMimeData;
 class QSortFilterProxyModel;
 class QSplitter;
 class QStackedWidget;
@@ -18,6 +19,7 @@ class Bar;
 class CoverView;
 class EqPanel;
 class GlyphButton;
+class SpectrumView;
 class LyricsView;
 class Playlist;
 struct Item;
@@ -61,6 +63,9 @@ protected:
     void keyPressEvent(QKeyEvent *) override;
     void resizeEvent(QResizeEvent *) override;
     bool eventFilter(QObject *o, QEvent *e) override;
+    void dragEnterEvent(QDragEnterEvent *) override;
+    void dragMoveEvent(QDragMoveEvent *) override;
+    void dropEvent(QDropEvent *) override;
 
 private:
     QWidget *buildPlaylistPane();
@@ -68,6 +73,9 @@ private:
     QWidget *buildTransport();
 
     Playlist *currentList() const;
+    void setExtrasVisible(bool on);
+    void fitCover();
+    bool dropFiles(const QMimeData *m, int row);   // from the file manager: add, never move/play
     Playlist *addList(Playlist *pl, bool select);
     void closeList(int idx);
     void renameList(int idx);
@@ -99,12 +107,14 @@ private:
     QSplitter *split_;
     CoverView *cover_ = nullptr;
     QLabel *title_, *artist_, *album_, *format_;
+    QWidget *extras_;   // lyrics / EQ: mode row + pages
     QStackedWidget *pages_;
-    QToolButton *lyricsTab_, *eqTab_;
+    QToolButton *lyricsTab_, *eqTab_, *specTab_;
+    SpectrumView *spectrum_;
     LyricsView *lyrics_;
     QLabel *lyricsSource_;
     EqPanel *eq_;
-    GlyphButton *playBtn_, *prevBtn_, *nextBtn_, *shuffleBtn_, *repeatBtn_, *volBtn_;
+    GlyphButton *playBtn_, *prevBtn_, *nextBtn_, *shuffleBtn_, *repeatBtn_, *volBtn_, *extrasBtn_;
     Bar *seek_, *vol_;
     QLabel *elapsed_, *total_;
     QWidget *nowPane_ = nullptr;

@@ -2,6 +2,7 @@
 #include "eqpanel.h"
 #include "lyricsview.h"
 #include "playlist.h"
+#include "spectrum.h"
 #include "theme.h"
 #include "widgets.h"
 #include <QApplication>
@@ -11,6 +12,8 @@
 #include <QDBusObjectPath>
 #include <QDesktopServices>
 #include <QDir>
+#include <QDropEvent>
+#include <QMimeData>
 #include <QFileDialog>
 #include <QFileSystemWatcher>
 #include <QFontDatabase>
@@ -39,7 +42,7 @@
 
 static QString dataDir(const QString &sub = {})
 {
-    QString d = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/julss-music";
+    QString d = QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/sonata";
     if (!sub.isEmpty()) d += '/' + sub;
     QDir().mkpath(d);
     return d;
@@ -47,7 +50,7 @@ static QString dataDir(const QString &sub = {})
 
 static QString stateFile()
 {
-    const QString d = QStandardPaths::writableLocation(QStandardPaths::GenericStateLocation) + "/julss-music";
+    const QString d = QStandardPaths::writableLocation(QStandardPaths::GenericStateLocation) + "/sonata";
     QDir().mkpath(d);
     return d + "/state.json";
 }
@@ -83,7 +86,8 @@ protected:
 
 MainWindow::MainWindow()
 {
-    setWindowTitle("Música");
+    setWindowTitle("Sonata");
+    setAcceptDrops(true);
     setMinimumSize(420, 360);
     resize(1100, 720);
     engine_ = new Engine(this);
@@ -132,7 +136,7 @@ MainWindow::MainWindow()
         total_->setText(formatTime(dur));
         if (format_->text().isEmpty()) format_->setText(engine_->formatInfo());
         // 10 Hz only while synced lyrics are on screen; 4 Hz is plenty otherwise
-        const bool karaoke = pages_->currentWidget() == lyrics_ && lyrics_->lyrics().synced && isVisible() && !isMinimized();
+        const bool karaoke = pages_->currentWidget() == lyrics_ && extras_->isVisible() && lyrics_->lyrics().synced && isVisible() && !isMinimized();
         engine_->setTickInterval(karaoke ? 100 : 250);
         if (pages_->currentWidget() == lyrics_) lyrics_->setPosition(pos, dur);
     });
@@ -176,8 +180,10 @@ MainWindow::MainWindow()
     sc(Qt::CTRL | Qt::Key_F, [this] { search_->setFocus(); search_->selectAll(); });
     sc(Qt::CTRL | Qt::Key_T, [this] { addList(new Playlist(QString("Lista %1").arg(lists_.size() + 1), this), true); });
     sc(Qt::CTRL | Qt::Key_W, [this] { closeList(tabs_->currentIndex()); });
-    sc(Qt::CTRL | Qt::Key_L, [this] { lyricsTab_->click(); });
-    sc(Qt::CTRL | Qt::Key_E, [this] { eqTab_->click(); });
+    sc(Qt::CTRL | Qt::Key_L, [this] { setExtrasVisible(true); lyricsTab_->click(); });
+    sc(Qt::CTRL | Qt::Key_E, [this] { setExtrasVisible(true); eqTab_->click(); });
+    sc(Qt::CTRL | Qt::Key_G, [this] { setExtrasVisible(true); specTab_->click(); });
+    sc(Qt::CTRL | Qt::Key_K, [this] { setExtrasVisible(!extras_->isVisible()); });
     sc(Qt::CTRL | Qt::Key_J, [this] {   // jump to what's playing
         if (!playingList_) return;
         tabs_->setCurrentIndex(lists_.indexOf(playingList_));
@@ -404,14 +410,21 @@ QWidget *MainWindow::buildNowPane()
     head->addLayout(info, 1);
     v->addLayout(head);
 
+    extras_ = new QWidget;
+    auto *ev = new QVBoxLayout(extras_);
+    ev->setContentsMargins(0, 0, 0, 0);
+    ev->setSpacing(12);
     auto *modeRow = new QHBoxLayout;
     modeRow->setSpacing(2);
     lyricsTab_ = new QToolButton;
     lyricsTab_->setText("Letra");
     eqTab_ = new QToolButton;
     eqTab_->setText("Ecualizador");
+    specTab_ = new QToolButton;
+    specTab_->setText("Espectro");
+    specTab_->setToolTip("Amplitud por frecuencias en cada momento (Ctrl+G)");
     auto *grp = new QButtonGroup(this);
-    for (QToolButton *b : {lyricsTab_, eqTab_}) {
+    for (QToolButton *b : {lyricsTab_, eqTab_, specTab_}) {
         b->setCheckable(true);
         b->setProperty("role", "text");
         b->setCursor(Qt::PointingHandCursor);
@@ -437,7 +450,7 @@ QWidget *MainWindow::buildNowPane()
     auto *earlier = mkSmall("−0,5 s", "La letra va retrasada: adelantarla");
     auto *later = mkSmall("+0,5 s", "La letra va adelantada: retrasarla");
     auto *refetch = mkSmall("Buscar otra vez", "Volver a buscar la letra en internet");
-    v->addLayout(modeRow);
+    ev->addLayout(modeRow);
 
     pages_ = new QStackedWidget;
     lyrics_ = new LyricsView;
@@ -445,23 +458,23 @@ QWidget *MainWindow::buildNowPane()
     eq_ = new EqPanel;
     pages_->addWidget(lyrics_);
     pages_->addWidget(eq_);
-    v->addWidget(pages_, 1);
+    spectrum_ = new SpectrumView(engine_);
+    pages_->addWidget(spectrum_);
+    ev->addWidget(pages_, 1);
+    v->addWidget(extras_, 1);
+    v->addStretch(0);   // keeps the cover at the top while the extras are hidden
 
-    connect(lyricsTab_, &QToolButton::clicked, this, [=, this] {
-        pages_->setCurrentWidget(lyrics_);
+    auto showPage = [=, this](QWidget *page) {
+        pages_->setCurrentWidget(page);
         for (auto *w : {static_cast<QWidget *>(lyricsSource_), static_cast<QWidget *>(earlier), static_cast<QWidget *>(later),
                         static_cast<QWidget *>(refetch)})
-            w->show();
-        lyrics_->setPosition(engine_->position(), engine_->duration());
+            w->setVisible(page == lyrics_);
+        if (page == lyrics_) lyrics_->setPosition(engine_->position(), engine_->duration());
         scheduleSave();
-    });
-    connect(eqTab_, &QToolButton::clicked, this, [=, this] {
-        pages_->setCurrentWidget(eq_);
-        for (auto *w : {static_cast<QWidget *>(lyricsSource_), static_cast<QWidget *>(earlier), static_cast<QWidget *>(later),
-                        static_cast<QWidget *>(refetch)})
-            w->hide();
-        scheduleSave();
-    });
+    };
+    connect(lyricsTab_, &QToolButton::clicked, this, [=, this] { showPage(lyrics_); });
+    connect(eqTab_, &QToolButton::clicked, this, [=, this] { showPage(eq_); });
+    connect(specTab_, &QToolButton::clicked, this, [=, this] { showPage(spectrum_); });
     connect(earlier, &QToolButton::clicked, this, [this] { lyrics_->setOffset(lyrics_->offset() + 0.5); });
     connect(later, &QToolButton::clicked, this, [this] { lyrics_->setOffset(lyrics_->offset() - 0.5); });
     connect(refetch, &QToolButton::clicked, this, [this] {
@@ -513,6 +526,9 @@ QWidget *MainWindow::buildTransport()
     vol_ = new Bar;
     vol_->setFixedWidth(96);
     vol_->setRange(1.0);
+    extrasBtn_ = new GlyphButton(Glyph::Lyrics, 18, "Mostrar / ocultar letra, ecualizador y espectro (Ctrl+K)");
+    extrasBtn_->setCheckable(true);
+    extrasBtn_->setChecked(true);
     auto *sideBtn = new GlyphButton(Glyph::Sidebar, 18, "Mostrar / ocultar la lista");
     sideBtn->setCheckable(true);
     sideBtn->setChecked(true);
@@ -531,6 +547,7 @@ QWidget *MainWindow::buildTransport()
     h->addWidget(volBtn_);
     h->addWidget(vol_);
     h->addSpacing(4);
+    h->addWidget(extrasBtn_);
     h->addWidget(sideBtn);
 
     connect(prevBtn_, &QToolButton::clicked, this, &MainWindow::prev);
@@ -547,17 +564,34 @@ QWidget *MainWindow::buildTransport()
             setVolume(0);
         } else setVolume(preMute_ > 0 ? preMute_ : 0.8);
     });
+    connect(extrasBtn_, &QToolButton::clicked, this, [this](bool on) { setExtrasVisible(on); });
     connect(sideBtn, &QToolButton::toggled, this, [this](bool on) { listPane_->setVisible(on); });
     return bar;
 }
 
+void MainWindow::fitCover()
+{
+    // cover: up to ~40 % of the pane width, but leave room for the lyrics;
+    // with lyrics/EQ hidden it may grow into the free space
+    const bool extras = !extras_->isHidden();
+    const double hf = extras ? 0.38 : 0.85;
+    const int s = std::clamp(std::min(int(nowPane_->width() * 0.40), int(nowPane_->height() * hf)), 96, extras ? 340 : 480);
+    if (cover_->width() != s) cover_->setFixedSize(s, s);
+}
+
+void MainWindow::setExtrasVisible(bool on)
+{
+    extrasBtn_->setChecked(on);
+    if (extras_->isHidden() != on) return;
+    extras_->setVisible(on);
+    if (on) lyrics_->setPosition(engine_->position(), engine_->duration());
+    fitCover();
+    scheduleSave();
+}
+
 bool MainWindow::eventFilter(QObject *o, QEvent *e)
 {
-    if (o == nowPane_ && e->type() == QEvent::Resize) {
-        // cover: up to ~40 % of the pane width, but leave room for the lyrics
-        const int s = std::clamp(std::min(int(nowPane_->width() * 0.40), int(nowPane_->height() * 0.38)), 96, 340);
-        if (cover_->width() != s) cover_->setFixedSize(s, s);
-    }
+    if (o == nowPane_ && e->type() == QEvent::Resize) fitCover();
     if (table_ && o == table_->viewport() && e->type() == QEvent::Resize) {
         // artist/album share the width with the title instead of fixed pixels
         // and drop out when the list gets too narrow for them
@@ -568,6 +602,27 @@ bool MainWindow::eventFilter(QObject *o, QEvent *e)
         const int side = std::clamp(int(w * (w < 560 ? 0.30 : 0.22)), 80, 240);
         hh->resizeSection(Playlist::ColArtist, side);
         hh->resizeSection(Playlist::ColAlbum, side);
+    }
+    if (table_ && o == table_->viewport()
+        && (e->type() == QEvent::DragEnter || e->type() == QEvent::DragMove || e->type() == QEvent::Drop)) {
+        // Files from outside (Nautilus…): copy them in at the drop row. The view
+        // would offer "move" and let the model decide; rows from our own tabs
+        // still go through the model so reordering keeps working.
+        auto *d = static_cast<QDropEvent *>(e);
+        if (d->source() == nullptr && d->mimeData()->hasUrls()) {
+            d->setDropAction(Qt::CopyAction);
+            d->accept();
+            if (e->type() == QEvent::Drop) {
+                int row = -1;
+                const QPoint pos = d->position().toPoint();
+                if (const QModelIndex i = table_->indexAt(pos); i.isValid()) {
+                    row = proxy_->mapToSource(i).row();
+                    if (pos.y() > table_->visualRect(i).center().y()) ++row;
+                }
+                dropFiles(d->mimeData(), row);
+            }
+            return true;
+        }
     }
     if (o == table_ && e->type() == QEvent::KeyPress) {
         auto *k = static_cast<QKeyEvent *>(e);
@@ -723,6 +778,48 @@ void MainWindow::addPaths(const QStringList &paths, bool playNow)
     pl->insertPaths(files);
     table_->scrollTo(proxy_->mapFromSource(pl->index(first, 0)));
     if (playNow || engine_->state() == Engine::Stopped) playItem(pl, pl->at(first).uid);
+}
+
+bool MainWindow::dropFiles(const QMimeData *m, int row)
+{
+    QStringList paths;
+    for (const QUrl &u : m->urls())
+        if (u.isLocalFile()) paths << u.toLocalFile();
+    QStringList files;
+    for (const QString &f : expandPaths(paths))
+        if (isAudioFile(f)) files << f;
+    if (files.isEmpty()) return false;
+    Playlist *pl = currentList();
+    if (!pl) pl = addList(new Playlist("Lista", this), true);
+    if (row < 0 || row > pl->count()) row = pl->count();
+    pl->insertPaths(files, row);
+    table_->scrollTo(proxy_->mapFromSource(pl->index(row, 0)));
+    return true;
+}
+
+// Drops anywhere else in the window (cover, lyrics, transport) append to the list.
+void MainWindow::dragEnterEvent(QDragEnterEvent *e)
+{
+    if (e->mimeData()->hasUrls()) {
+        e->setDropAction(Qt::CopyAction);
+        e->accept();
+    }
+}
+
+void MainWindow::dragMoveEvent(QDragMoveEvent *e)
+{
+    if (e->mimeData()->hasUrls()) {
+        e->setDropAction(Qt::CopyAction);
+        e->accept();
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent *e)
+{
+    if (e->source() == nullptr && dropFiles(e->mimeData(), -1)) {
+        e->setDropAction(Qt::CopyAction);
+        e->accept();
+    }
 }
 
 void MainWindow::showContextMenu(const QPoint &pos)
@@ -1106,7 +1203,7 @@ QVariantMap MainWindow::mprisMetadata() const
         return m;
     }
     const TrackInfo &t = it->info;
-    m["mpris:trackid"] = QVariant::fromValue(QDBusObjectPath(QString("/org/julss/music/track/%1").arg(playingUid_)));
+    m["mpris:trackid"] = QVariant::fromValue(QDBusObjectPath(QString("/org/sonata/track/%1").arg(playingUid_)));
     const double dur = engine_->duration() > 0 ? engine_->duration() : t.duration;
     m["mpris:length"] = qlonglong(dur * 1e6);
     m["xesam:title"] = t.displayTitle();
@@ -1121,8 +1218,8 @@ QVariantMap MainWindow::mprisMetadata() const
 
 void MainWindow::raiseWindow()
 {
-    QProcess::startDetached("sh", {"-c", "hyprctl dispatch 'hl.dsp.focus({ window = \"class:julss-music\" })' >/dev/null 2>&1"
-                                         " || hyprctl dispatch focuswindow class:julss-music"});
+    QProcess::startDetached("sh", {"-c", "hyprctl dispatch 'hl.dsp.focus({ window = \"class:sonata\" })' >/dev/null 2>&1"
+                                         " || hyprctl dispatch focuswindow class:sonata"});
 }
 
 // ─────────────────────────── persistence ───────────────────────────
@@ -1163,8 +1260,9 @@ void MainWindow::saveState()
         {"eq", QJsonObject{{"enabled", eq.enabled}, {"preamp", eq.preamp}, {"auto", eq.autoPreamp}, {"gains", gains}}},
         {"eqCustom", eq_->customPresets()},
         {split_->orientation() == Qt::Vertical ? "splitV" : "split", QString::fromLatin1(split_->saveState().toBase64())},
-        {"page", pages_->currentWidget() == eq_ ? "eq" : "lyrics"},
+        {"page", pages_->currentWidget() == eq_ ? "eq" : pages_->currentWidget() == spectrum_ ? "spectrum" : "lyrics"},
         {"listVisible", listPane_->isVisible()},
+        {"extrasVisible", !extras_->isHidden()},
     };
     if (hasCurrent()) {
         double pos = engine_->state() != Engine::Stopped ? engine_->position() : std::max(0.0, resumePos_);
@@ -1223,6 +1321,8 @@ void MainWindow::loadState()
     eq_->setSettings(eq);
     engine_->setEq(eq);
     if (o.value("page").toString() == "eq") eqTab_->click();
+    else if (o.value("page").toString() == "spectrum") specTab_->click();
+    if (!o.value("extrasVisible").toBool(true)) setExtrasVisible(false);
 
     // last track, paused where we left it (press play to continue)
     const QJsonObject pj = o.value("playing").toObject();

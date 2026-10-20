@@ -24,8 +24,8 @@ public:
     MprisRoot(QObject *holder, MainWindow *w) : QDBusAbstractAdaptor(holder), w_(w) {}
     bool yes() const { return true; }
     bool no() const { return false; }
-    QString identity() const { return "Música"; }
-    QString desktopEntry() const { return "julss-music"; }
+    QString identity() const { return "Sonata"; }
+    QString desktopEntry() const { return "sonata"; }
     QStringList schemes() const { return {"file"}; }
     QStringList mimes() const;
 public slots:

@@ -95,5 +95,5 @@ void registerMpris(MainWindow *w)
     new MprisPlayer(holder, w);
     QDBusConnection bus = QDBusConnection::sessionBus();
     bus.registerObject("/org/mpris/MediaPlayer2", holder);
-    bus.registerService("org.mpris.MediaPlayer2.julss_music");
+    bus.registerService("org.mpris.MediaPlayer2.sonata");
 }

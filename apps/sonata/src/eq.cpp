@@ -133,6 +133,8 @@ void Dsp::process(float *buf, unsigned frames)
         }
     }
 
+    scope_.push(buf, frames, ch);   // after the EQ, before the volume: the view doesn't shrink when you turn it down
+
     // Volume (cubic curve feels linear to the ear) with a per-buffer ramp, plus
     // a safety clip so a hot EQ never wraps in the DAC.
     const float v = volume_.load(std::memory_order_relaxed);

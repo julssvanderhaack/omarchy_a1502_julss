@@ -166,7 +166,7 @@ QCheckBox::indicator:checked { background: %ACC%; border-color: %ACC%; }
     s.replace("%SEL%", n(selection)).replace("%ACCT%", n(accentText));
     s.replace("%ACC%", n(accent)).replace("%HOVER%", n(hover));
     // the combo arrow has to be an image; draw one in the theme colour
-    const QString arrow = QDir::tempPath() + "/julss-music-arrow.svg";
+    const QString arrow = QDir::tempPath() + "/sonata-arrow.svg";
     QFile af(arrow);
     if (af.open(QIODevice::WriteOnly | QIODevice::Truncate))
         af.write(QString("<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'><path d='M1 3 L5 7 L9 3' fill='none' stroke='%1' stroke-width='1.6'/></svg>")

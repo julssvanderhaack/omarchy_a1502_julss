@@ -5,6 +5,7 @@
 #include <array>
 #include <atomic>
 #include <QString>
+#include "scope.h"
 #include <QVector>
 
 constexpr int kBands = 10;
@@ -35,6 +36,7 @@ public:
     // GUI thread
     void setEq(const EqSettings &s);
     void setVolume(float linear) { volume_.store(linear, std::memory_order_relaxed); }
+    Scope &scope() { return scope_; }
     // Decoder thread, while no stream is running
     void setFormat(int rate, int channels);
     // Realtime thread
@@ -56,4 +58,5 @@ private:
     double z_[kBands][2][2]{};               // band, channel, state
     std::atomic<float> volume_{1.0f};
     float curGain_ = 1.0f;
+    Scope scope_;
 };

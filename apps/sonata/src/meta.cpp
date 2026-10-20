@@ -163,7 +163,7 @@ QStringList expandPaths(const QStringList &paths)
 
 QString cacheDir(const QString &sub)
 {
-    const QString d = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + "/julss-music/" + sub;
+    const QString d = QStandardPaths::writableLocation(QStandardPaths::GenericCacheLocation) + "/sonata/" + sub;
     QDir().mkpath(d);
     return d;
 }

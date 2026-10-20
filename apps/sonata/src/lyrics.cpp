@@ -14,7 +14,7 @@
 #include <QUrlQuery>
 #include <algorithm>
 
-static const char *kUserAgent = "julss-music/1.0 (https://github.com/julssvanderhaack/omarchy_a1502_julss)";
+static const char *kUserAgent = "Sonata/1.0 (https://github.com/julssvanderhaack/omarchy_a1502_julss)";
 
 Lyrics parseLyrics(const QString &text)
 {

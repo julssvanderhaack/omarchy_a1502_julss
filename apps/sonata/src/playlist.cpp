@@ -14,7 +14,7 @@
 #include <QUrl>
 #include <atomic>
 
-static const char *kRowsMime = "application/x-julss-music-rows";
+static const char *kRowsMime = "application/x-sonata-rows";
 
 quint64 Playlist::newUid()
 {
@@ -274,7 +274,7 @@ bool Playlist::dropMimeData(const QMimeData *m, Qt::DropAction, int row, int, co
         }
         if (!moving.isEmpty()) {
             // Dropped from this very list: move. From another tab: copy with fresh uids.
-            const bool local = rowOf(moving.front().uid) >= 0 && m->property("julssSource").isNull();
+            const bool local = rowOf(moving.front().uid) >= 0 && m->property("sonataSource").isNull();
             beginResetModel();
             if (local) {
                 int before = 0;

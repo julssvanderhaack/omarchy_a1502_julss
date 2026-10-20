@@ -199,9 +199,11 @@ Para desarrollar: `cmake -S apps/julss-calc -B apps/julss-calc/build && cmake --
 `--target castest` compila un banco de pruebas de consola del motor
 (`./build/castest`, o `./build/castest "expr" …`).
 
-## Reproductor de música (`apps/julss-music`)
+## Reproductor de música Sonata (`apps/sonata`)
 
-Sustituye a Audacious. C++20 + Qt6 Widgets, con los colores del tema de Omarchy
+Sustituye a Audacious. Su icono es una clave de sol (trazada a partir del glifo
+de Noto Music). Antes se llamaba `julss-music`: al primer arranque copia sus
+listas, estado y cachés a las carpetas de Sonata. C++20 + Qt6 Widgets, con los colores del tema de Omarchy
 (se recargan solos al cambiar de tema) y ventana normal en mosaico.
 
 - **Audio**: FFmpeg decodifica cualquier formato (MP3, FLAC, ALAC, Opus, Vorbis,
@@ -211,6 +213,7 @@ Sustituye a Audacious. C++20 + Qt6 Widgets, con los colores del tema de Omarchy
   `pipewire/10-julss-native-rates.conf`, PipeWire también la respeta. Gapless entre
   pistas de la misma frecuencia. Con volumen 100 % y EQ apagado las muestras no se
   tocan (bit-perfect). ~2,5 % de un núcleo reproduciendo MP3 en el i5-5287U.
+- **Espectro** en tiempo real (FFT de 4096 puntos a 30 fps, solo mientras está visible).
 - **Ecualizador** de 10 bandas (biquads en el hilo de tiempo real), 15
   preajustes + propios, curva de respuesta y anti-saturación calculada sobre la
   curva real.
@@ -218,10 +221,10 @@ Sustituye a Audacious. C++20 + Qt6 Widgets, con los colores del tema de Omarchy
   caché → [lrclib.net](https://lrclib.net). Clic en una línea para saltar ahí;
   ±0,5 s para corregir desfases.
 - **Carátula** incrustada o de la carpeta (`cover/folder/front.jpg`…).
-- **Listas** en pestañas (se guardan solas en `~/.local/share/julss-music`),
+- **Listas** en pestañas (se guardan solas en `~/.local/share/sonata`),
   arrastrar y soltar, búsqueda, importar/exportar M3U.
 - **Instancia única**: cada clic en un archivo de audio en Archivos lo añade a la
-  lista (y suena si no había nada). `julss-music --toggle|--next|--prev|--stop`.
+  lista (y suena si no había nada). `sonata --toggle|--next|--prev|--stop`.
 - **MPRIS**: la barra (julss.media) y las teclas multimedia lo controlan.
 
 Atajos: Espacio, ←/→ (±5 s, Mayús ±30 s), Ctrl+←/→ (pista), Ctrl+↑/↓ (volumen),

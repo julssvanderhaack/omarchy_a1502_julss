@@ -204,7 +204,7 @@ public:
     Output(Ring &ring, Dsp &dsp) : ring_(ring), dsp_(dsp)
     {
         pw_init(nullptr, nullptr);
-        loop_ = pw_thread_loop_new("julss-music", nullptr);
+        loop_ = pw_thread_loop_new("sonata", nullptr);
         pw_thread_loop_start(loop_);
     }
     ~Output()
@@ -230,8 +230,8 @@ public:
         const QByteArray nodeRate = "1/" + QByteArray::number(rate);
         pw_properties *props = pw_properties_new(
             PW_KEY_MEDIA_TYPE, "Audio", PW_KEY_MEDIA_CATEGORY, "Playback", PW_KEY_MEDIA_ROLE, "Music",
-            PW_KEY_APP_NAME, "Música", PW_KEY_APP_ID, "julss-music", PW_KEY_APP_ICON_NAME, "multimedia-audio-player",
-            PW_KEY_NODE_NAME, "julss-music", PW_KEY_NODE_DESCRIPTION, "Música",
+            PW_KEY_APP_NAME, "Sonata", PW_KEY_APP_ID, "sonata", PW_KEY_APP_ICON_NAME, "sonata",
+            PW_KEY_NODE_NAME, "sonata", PW_KEY_NODE_DESCRIPTION, "Sonata",
             PW_KEY_NODE_LATENCY, lat.constData(), PW_KEY_NODE_RATE, nodeRate.constData(), nullptr);
         static const pw_stream_events events = [] {
             pw_stream_events e{};
@@ -239,9 +239,9 @@ public:
             e.process = &Output::onProcess;
             return e;
         }();
-        if (const QByteArray t = qgetenv("JULSS_MUSIC_TARGET"); !t.isEmpty())   // tests: play into a null sink
+        if (const QByteArray t = qgetenv("SONATA_TARGET"); !t.isEmpty())   // tests: play into a null sink
             pw_properties_set(props, PW_KEY_TARGET_OBJECT, t.constData());
-        stream_ = pw_stream_new_simple(pw_thread_loop_get_loop(loop_), "julss-music", props, &events, this);
+        stream_ = pw_stream_new_simple(pw_thread_loop_get_loop(loop_), "sonata", props, &events, this);
 
         uint8_t buffer[1024];
         spa_pod_builder b = SPA_POD_BUILDER_INIT(buffer, sizeof buffer);
@@ -318,6 +318,13 @@ private:
 };
 
 // ───────────────────────────── Engine ───────────────────────────────
+
+int Engine::scopeSnapshot(float *out, size_t n) const
+{
+    const int ch = std::max(1, out_->channels());
+    const_cast<Dsp &>(dsp_).scope().snapshot(out, n, out_->pendingSamples() / uint64_t(ch));
+    return out_->rate() > 0 ? out_->rate() : 44100;
+}
 
 Engine::Engine(QObject *parent) : QObject(parent), ring_(1u << 18)
 {

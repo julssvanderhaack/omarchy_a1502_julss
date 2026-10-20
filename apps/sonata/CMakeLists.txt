@@ -1,9 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
-project(julss-music LANGUAGES CXX)
+project(sonata LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
@@ -15,10 +16,12 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(FFMPEG REQUIRED IMPORTED_TARGET libavformat libavcodec libavutil libswresample)
 pkg_check_modules(PIPEWIRE REQUIRED IMPORTED_TARGET libpipewire-0.3)
 
-add_executable(julss-music
+add_executable(sonata
   src/main.cpp
   src/ring.h
+  src/scope.h
   src/eq.h src/eq.cpp
+  src/spectrum.h src/spectrum.cpp
   src/engine.h src/engine.cpp
   src/meta.h src/meta.cpp
   src/lyrics.h src/lyrics.cpp
@@ -29,8 +32,10 @@ add_executable(julss-music
   src/theme.h src/theme.cpp
   src/widgets.h src/widgets.cpp
   src/mainwindow.h src/mainwindow.cpp
+  data/sonata.qrc
 )
-target_link_libraries(julss-music PRIVATE Qt6::Widgets Qt6::Network Qt6::DBus Qt6::Concurrent
+target_link_libraries(sonata PRIVATE Qt6::Widgets Qt6::Network Qt6::DBus Qt6::Concurrent
   PkgConfig::FFMPEG PkgConfig::PIPEWIRE)
-install(TARGETS julss-music RUNTIME DESTINATION bin)
-install(FILES data/julss-music.desktop DESTINATION share/applications)
+install(TARGETS sonata RUNTIME DESTINATION bin)
+install(FILES data/sonata.desktop DESTINATION share/applications)
+install(FILES data/sonata.svg DESTINATION share/icons/hicolor/scalable/apps)
