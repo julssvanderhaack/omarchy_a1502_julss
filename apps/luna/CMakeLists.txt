@@ -23,6 +23,8 @@ add_executable(luna
   src/thumbs.h src/thumbs.cpp
   src/apps.h src/apps.cpp
   src/fileops.h src/fileops.cpp
+  src/undo.h src/undo.cpp
+  src/places.h src/places.cpp
   src/pathbar.h src/pathbar.cpp
   src/remote.h src/remote.cpp
   src/sidebar.h src/sidebar.cpp

@@ -1,4 +1,5 @@
 #include "pathbar.h"
+#include "places.h"
 #include "fileops.h"
 #include "icons.h"
 #include "remote.h"
@@ -84,7 +85,7 @@ void PathBar::setTextMode(bool text)
 void PathBar::setPath(const QString &path)
 {
     m_path = path;
-    if (!m_edit->hasFocus()) m_edit->setText(path == FileOps::trashFiles() ? QString() : path);
+    if (!m_edit->hasFocus()) m_edit->setText(path == FileOps::trashFiles() || Places::isVirtual(path) ? QString() : path);
     if (!m_textMode) m_stack->setCurrentWidget(m_crumbs);
     scheduleRebuild();
 }
@@ -101,7 +102,7 @@ void PathBar::scheduleRebuild()
 
 void PathBar::editPath()
 {
-    m_edit->setText(m_path == FileOps::trashFiles() ? QString() : m_path);
+    m_edit->setText(m_path == FileOps::trashFiles() || Places::isVirtual(m_path) ? QString() : m_path);
     m_stack->setCurrentWidget(m_edit);
     m_edit->setFocus();
     m_edit->selectAll();
@@ -118,6 +119,11 @@ void PathBar::submit()
     QString t = m_edit->text().trimmed();
     if (t.isEmpty()) return;
     if (t.startsWith("file://")) t = QUrl(t).toLocalFile();
+    if (Places::isVirtual(t)) {
+        showCrumbs();
+        emit navigate(t);
+        return;
+    }
     if (t.contains("://")) {
         showCrumbs();
         emit connectRequested(t);
@@ -177,7 +183,9 @@ void PathBar::rebuild()
         QString acc = base;
         for (const QString &part : rest.split('/', Qt::SkipEmptyParts)) crumbs << Crumb{part, acc += '/' + part, {}};
     };
-    if (m_path == FileOps::trashFiles() || m_path.startsWith(FileOps::trashFiles() + '/')) {
+    if (Places::isVirtual(m_path)) {
+        crumbs << Crumb{Places::displayName(m_path), m_path, Icons::get().place(m_path == Places::recent ? "recent" : "starred")};
+    } else if (m_path == FileOps::trashFiles() || m_path.startsWith(FileOps::trashFiles() + '/')) {
         crumbs << Crumb{QString::fromUtf8("Papelera"), FileOps::trashFiles(), Icons::get().place("trash")};
         tail(FileOps::trashFiles(), m_path.mid(FileOps::trashFiles().size()));
     } else if (Remote::isRemotePath(m_path)) {

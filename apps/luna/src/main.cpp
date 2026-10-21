@@ -52,30 +52,13 @@ int main(int argc, char **argv)
     // holds a screenful at most, so scrolling a photo folder rescaled them.
     QPixmapCache::setCacheLimit(64 * 1024);
 
+    Settings::get().load();   // first: the theme takes the accent colour from it
     Theme &th = Theme::get();
     th.load();
-    Settings::get().load();
     Icons::get().reload();
 
     app.setStyle(new LunaStyle(QStyleFactory::create("Fusion")));
-    QPalette pal;
-    pal.setColor(QPalette::Window, th.bgDark);
-    pal.setColor(QPalette::WindowText, th.fg);
-    pal.setColor(QPalette::Base, th.bg);
-    pal.setColor(QPalette::AlternateBase, th.bgLight);
-    pal.setColor(QPalette::Text, th.fg);
-    pal.setColor(QPalette::Button, th.bgLight);
-    pal.setColor(QPalette::ButtonText, th.fg);
-    pal.setColor(QPalette::Highlight, th.accent);
-    pal.setColor(QPalette::HighlightedText, th.bg);
-    pal.setColor(QPalette::PlaceholderText, th.fgDim);
-    pal.setColor(QPalette::ToolTipBase, th.bgLight);
-    pal.setColor(QPalette::ToolTipText, th.fg);
-    pal.setColor(QPalette::Link, th.accent);
-    pal.setColor(QPalette::Disabled, QPalette::WindowText, th.fgDim);
-    pal.setColor(QPalette::Disabled, QPalette::ButtonText, th.fgDim);
-    app.setPalette(pal);
-    app.setStyleSheet(th.styleSheet());
+    th.applyToApp();
 
     QStringList paths;
     for (int i = 1; i < argc; ++i) {

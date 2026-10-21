@@ -13,4 +13,5 @@ struct Theme {
     static Theme &get();
     void load();
     QString styleSheet() const;
+    void applyToApp() const;   // palette and style sheet of the whole application
 };

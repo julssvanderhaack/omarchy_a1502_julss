@@ -1,7 +1,9 @@
 // Copy/move/delete jobs on worker threads, the freedesktop trash and a
 // clipboard format compatible with Nautilus.
 #pragma once
+#include <QList>
 #include <QObject>
+#include <QPair>
 #include <QStringList>
 #include <QThread>
 #include <atomic>
@@ -9,12 +11,14 @@
 class Job : public QObject {
     Q_OBJECT
 public:
-    enum Kind { Copy, Move, Link, Delete, EmptyTrash, Restore };
+    enum Kind { Copy, Move, Link, Delete, EmptyTrash, Restore, CopyTo, MoveTo };   // *To: exact target paths
     enum Answer { Replace, Skip, KeepBoth, Cancel };
     Job(Kind k, QStringList srcs, QString dest);
     Kind kind() const { return m_kind; }
     QString title() const;
     QStringList createdPaths() const { return m_created; }
+    QList<QPair<QString, QString>> pairs() const { return m_pairs; }   // source -> what it became
+    void setTargets(const QStringList &t) { m_targets = t; }
     void start();
     void cancel() { m_cancel = true; }
 
@@ -26,13 +30,15 @@ signals:
 private:
     void run();
     void scan(const QString &path);
+    void done(const QString &src, const QString &dst);
     bool copyTree(const QString &src, const QString &dst, bool move);
     bool copyFile(const QString &src, const QString &dst);
     bool removeTree(const QString &path);
     QString resolve(const QString &src, const QString &dst, bool &skip);
 
     Kind m_kind;
-    QStringList m_srcs, m_errors, m_created;
+    QStringList m_srcs, m_errors, m_created, m_targets;
+    QList<QPair<QString, QString>> m_pairs;
     QString m_dest;
     std::atomic<bool> m_cancel{false};
     qint64 m_totalBytes = 0, m_doneBytes = 0;
@@ -51,7 +57,12 @@ public:
     Job *deleteForever(const QStringList &paths);
     Job *emptyTrash();
     Job *restore(const QStringList &trashedPaths);
-    QStringList trash(const QStringList &paths);   // returns error messages
+    Job *copyTo(const QStringList &srcs, const QStringList &targets);
+    Job *moveTo(const QStringList &srcs, const QStringList &targets);
+    // Returns error messages; `done` gets original -> path in the trash.
+    QStringList trash(const QStringList &paths, QList<QPair<QString, QString>> *done = nullptr);
+    // Off while undo/redo runs, so its own operations are not recorded.
+    void setRecording(bool on) { m_recording = on; }
 
     static QString trashFiles();
     static QString trashInfo();
@@ -66,4 +77,5 @@ signals:
 
 private:
     Job *startJob(Job *j);
+    bool m_recording = true;
 };

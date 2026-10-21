@@ -1,13 +1,16 @@
 #include "settingsdialog.h"
 #include "icons.h"
 #include "settings.h"
+#include "theme.h"
 #include <QCheckBox>
+#include <QColorDialog>
 #include <QComboBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPixmap>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QStackedWidget>
@@ -43,12 +46,145 @@ QLabel *note(const QString &t)
     l->setWordWrap(true);
     return l;
 }
+
+// A point size where 0 means "automatic" (shown as `autoText`).
+QSpinBox *pointSize(double &field, const QString &autoText)
+{
+    auto *b = new QSpinBox;
+    b->setRange(0, 24);
+    b->setSpecialValueText(autoText);
+    b->setSuffix(" pt");
+    b->setValue(field > 0 ? qRound(field) : 0);
+    QObject::connect(b, &QSpinBox::valueChanged, b, [&field](int v) {
+        field = v < 6 ? 0 : v;   // 1..5 pt would be unreadable
+        Settings::get().changed();
+    });
+    return b;
+}
+
+// Header buttons, left to right: drag to reorder, tick to show, and group
+// separators to split them into groups (drawn joined with "Iconos juntos").
+QWidget *toolbarEditor()
+{
+    struct Info { const char *name, *glyph; };
+    static const QHash<QString, Info> info = {
+        {"back", {"Atrás", "back"}}, {"forward", {"Adelante", "forward"}}, {"up", {"Carpeta superior", "up"}},
+        {"path", {"Barra de ruta", "crumbs"}}, {"search", {"Buscar", "search"}}, {"view", {"Modo de vista", "icons"}},
+        {"split", {"Vista dividida", "split"}}, {"sidebar", {"Barra lateral", "sidebar"}}, {"menu", {"Menú", "menu"}},
+    };
+    auto *w = new QWidget;
+    auto *h = new QHBoxLayout(w);
+    h->setContentsMargins(0, 0, 0, 0);
+    auto *list = new QListWidget;
+    list->setDragDropMode(QAbstractItemView::InternalMove);
+    list->setDefaultDropAction(Qt::MoveAction);
+    list->setMinimumHeight(300);
+    h->addWidget(list, 1);
+    auto *buttons = new QVBoxLayout;
+    h->addLayout(buttons);
+
+    auto separator = [] {
+        auto *it = new QListWidgetItem(QString::fromUtf8("────  nuevo grupo  ────"));
+        it->setData(Qt::UserRole, QStringLiteral("|"));
+        it->setTextAlignment(Qt::AlignCenter);
+        it->setForeground(Theme::get().fgDim);
+        it->setFlags(it->flags() & ~Qt::ItemIsUserCheckable);   // checkable by default
+        it->setToolTip(QString::fromUtf8("Lo que hay debajo va en otro grupo"));
+        return it;
+    };
+    auto fill = [=](const QStringList &layout) {
+        const QSignalBlocker b(list);
+        list->clear();
+        for (const QString &t : layout) {
+            if (t == "|") {
+                list->addItem(separator());
+                continue;
+            }
+            const QString name = t.startsWith('-') ? t.mid(1) : t;
+            const Info i = info.value(name);
+            auto *it = new QListWidgetItem(Icons::get().ui(i.glyph), QString::fromUtf8(i.name));
+            it->setData(Qt::UserRole, name);
+            if (name == "path" || name == "menu") {
+                it->setFlags(it->flags() & ~Qt::ItemIsUserCheckable);
+                it->setToolTip(QString::fromUtf8("Siempre visible; se puede mover"));
+            } else {
+                it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
+                it->setCheckState(t.startsWith('-') ? Qt::Unchecked : Qt::Checked);
+            }
+            list->addItem(it);
+        }
+    };
+    auto save = [=] {
+        QStringList out;
+        for (int r = 0; r < list->count(); ++r) {
+            const QListWidgetItem *it = list->item(r);
+            const QString t = it->data(Qt::UserRole).toString();
+            // only items with a real check box can be hidden
+            const bool hidden = it->data(Qt::CheckStateRole).isValid() && it->checkState() == Qt::Unchecked;
+            out << (hidden ? '-' + t : t);
+        }
+        const QStringList tidy = Settings::normalizeToolbar(out);
+        Settings::get().toolbarLayout = tidy;
+        Settings::get().changed();
+        if (tidy != out) {   // e.g. two separators in a row
+            const int row = list->currentRow();
+            fill(tidy);
+            list->setCurrentRow(std::min(row, list->count() - 1));
+        }
+    };
+    fill(Settings::get().toolbarLayout);
+    QObject::connect(list->model(), &QAbstractItemModel::rowsMoved, list, [save] { save(); });
+    QObject::connect(list, &QListWidget::itemChanged, list, [save] { save(); });
+
+    auto button = [&](const QString &text, auto f) {
+        auto *b = new QPushButton(text);
+        QObject::connect(b, &QPushButton::clicked, list, f);
+        buttons->addWidget(b);
+        return b;
+    };
+    // Taking an item out and back in passes through states that are not a
+    // valid layout: keep the list quiet and save once at the end.
+    auto shift = [=](int by) {
+        const int r = list->currentRow(), to = r + by;
+        if (r < 0 || to < 0 || to >= list->count()) return;
+        {
+            const QSignalBlocker b(list);
+            list->insertItem(to, list->takeItem(r));
+            list->setCurrentRow(to);
+        }
+        save();
+    };
+    button(QString::fromUtf8("Subir"), [=] { shift(-1); });
+    button(QString::fromUtf8("Bajar"), [=] { shift(1); });
+    buttons->addSpacing(10);
+    button(QString::fromUtf8("Separar grupo"), [=] {
+        const int r = list->currentRow();
+        {
+            const QSignalBlocker b(list);
+            list->insertItem(r < 0 ? list->count() : r + 1, separator());
+        }
+        save();
+    });
+    button(QString::fromUtf8("Quitar separación"), [=] {
+        QListWidgetItem *it = list->currentItem();
+        if (!it || it->data(Qt::UserRole).toString() != "|") return;
+        delete it;
+        save();
+    });
+    buttons->addSpacing(10);
+    button("Restablecer", [=] {
+        fill(Settings::normalizeToolbar({"back", "forward", "up", "|", "path", "|", "search", "view", "split", "sidebar", "menu"}));
+        save();
+    });
+    buttons->addStretch();
+    return w;
+}
 }
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 {
     setWindowTitle("Ajustes de Luna");
-    resize(720, 520);
+    resize(780, 620);
     auto *h = new QHBoxLayout(this);
     m_nav = new QListWidget;
     m_nav->setObjectName("settingsNav");
@@ -106,21 +242,47 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
         Settings::get().changed();
     });
     f->addRow("Tema de iconos GTK:", theme);
+    auto *accentRow = new QWidget;
+    auto *ah = new QHBoxLayout(accentRow);
+    ah->setContentsMargins(0, 0, 0, 0);
+    auto *pick = new QPushButton;
+    auto *reset = new QPushButton(QString::fromUtf8("Usar el del tema"));
+    auto showAccent = [pick, reset] {
+        const QColor c = Theme::get().accent;
+        pick->setText(Settings::get().accentColor.isEmpty() ? QString::fromUtf8("Del tema (%1)").arg(c.name()) : c.name());
+        QPixmap swatch(16, 16);
+        swatch.fill(c);
+        pick->setIcon(QIcon(swatch));
+        reset->setEnabled(!Settings::get().accentColor.isEmpty());
+    };
+    showAccent();
+    connect(pick, &QPushButton::clicked, this, [this, showAccent] {
+        const QColor c = QColorDialog::getColor(Theme::get().accent, this, QString::fromUtf8("Color de acento"));
+        if (!c.isValid()) return;
+        Settings::get().accentColor = c.name();
+        Settings::get().changed();
+        showAccent();
+    });
+    connect(reset, &QPushButton::clicked, this, [showAccent] {
+        Settings::get().accentColor.clear();
+        Settings::get().changed();
+        showAccent();
+    });
+    ah->addWidget(pick, 1);
+    ah->addWidget(reset);
+    f->addRow("Color de acento:", accentRow);
+    f->addRow(QString::fromUtf8("Texto de las vistas:"), pointSize(s.viewFontPt, QString::fromUtf8("Como el sistema")));
     f->addRow("", note(QString::fromUtf8("«Seguir al sistema» usa el tema que pone Omarchy al cambiar de tema (gsettings). "
-                                         "Los colores de la ventana salen siempre del tema activo de Omarchy.")));
+                                         "Los demás colores de la ventana salen del tema activo de Omarchy.")));
 
     // ---- Barra superior
     f = page("Barra superior", "menu");
     f->addRow("Estilo:", combo({"Solo iconos", "Iconos y texto", "Iconos juntos (agrupados)"}, s.toolbarStyle));
     f->addRow(QString::fromUtf8("Tamaño de los iconos:"), combo({QString::fromUtf8("Pequeños"), "Medianos", "Grandes"}, s.toolbarIconSize));
-    f->addRow("Botones:", check("Adelante", s.tbForward));
-    f->addRow("", check("Carpeta superior", s.tbUp));
-    f->addRow("", check("Buscar", s.tbSearch));
-    f->addRow("", check("Modo de vista", s.tbView));
-    f->addRow("", check("Vista dividida", s.tbSplit));
-    f->addRow("", check("Barra lateral", s.tbSidebar));
-    f->addRow("", note(QString::fromUtf8("También con clic derecho sobre la barra. En ventanas estrechas el texto se oculta solo "
-                                         "y la barra lateral se aparta (F9 la muestra igualmente).")));
+    f->addRow(toolbarEditor());
+    f->addRow(note(QString::fromUtf8("De arriba abajo = de izquierda a derecha. Arrastra para mover, marca para mostrar y usa las "
+                                     "separaciones para formar grupos (con el estilo «Iconos juntos» cada grupo va unido). "
+                                     "Clic derecho sobre la barra para cambios rápidos.")));
 
     // ---- Barra lateral
     f = page("Barra lateral", "sidebar");
@@ -133,6 +295,17 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
     });
     f->addRow(QString::fromUtf8("Posición:"), side);
     f->addRow("", check("Mostrar la barra lateral (F9)", s.sidebarVisible));
+    f->addRow(QString::fromUtf8("Tamaño del texto:"), pointSize(s.sidebarFontPt, QString::fromUtf8("Automático (algo menor)")));
+    static const int iconSizes[] = {12, 14, 16, 18, 20, 24, 32};
+    auto *sideIcons = new QComboBox;
+    for (int px : iconSizes) sideIcons->addItem(QString("%1 px").arg(px), px);
+    sideIcons->setCurrentIndex(std::max(0, sideIcons->findData(s.sidebarIconSize)));
+    connect(sideIcons, &QComboBox::currentIndexChanged, this, [sideIcons](int) {
+        Settings::get().sidebarIconSize = sideIcons->currentData().toInt();
+        Settings::get().changed();
+    });
+    f->addRow(QString::fromUtf8("Tamaño de los iconos:"), sideIcons);
+    f->addRow("Espaciado:", combo({"Compacto", "Normal", "Amplio"}, s.sidebarSpacing));
     f->addRow("", check("Lugares", s.showPlaces));
     f->addRow("", check("Marcadores", s.showBookmarks));
     f->addRow("", check("Dispositivos", s.showDevices));
@@ -178,6 +351,12 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
     f->addRow("", note(QString::fromUtf8("Se ejecuta en la carpeta actual (F4). Por defecto xdg-terminal-exec, la terminal de Omarchy.")));
 
     m_nav->setCurrentRow(0);
+}
+
+void SettingsDialog::showPage(const QString &title)
+{
+    for (int i = 0; i < m_nav->count(); ++i)
+        if (m_nav->item(i)->text() == title) m_nav->setCurrentRow(i);
 }
 
 QFormLayout *SettingsDialog::page(const QString &title, const QString &glyph)

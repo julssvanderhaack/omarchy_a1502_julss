@@ -47,6 +47,9 @@ public:
     void startSearch(const QString &pattern);
     void stopSearch();
     bool searching() const { return m_searchMode; }
+    // A flat list of arbitrary paths (Recientes, Destacados) under a
+    // virtual root; shown like search results.
+    void setPaths(const QString &root, const QStringList &paths);
 
     QString filePath(const QModelIndex &idx) const;
     const FileEntry *entry(const QModelIndex &idx) const;
@@ -120,6 +123,7 @@ private:
     void watch(Node *n);
     void onDirChanged(const QString &path);
     void thumbReady(const QString &path);
+    void insertFlat(std::vector<std::pair<QString, FileEntry>> &items);
     static void searchWorker(QPointer<FsModel> self, std::shared_ptr<std::atomic<bool>> cancel, QByteArray root, QString pattern,
                              quint64 gen, bool hidden);
 
@@ -134,6 +138,7 @@ private:
     bool m_loading = false;
     QString m_error;
     bool m_searchMode = false;
+    bool m_virtual = false;      // root is not a folder: nothing can be dropped on it
     std::shared_ptr<std::atomic<bool>> m_searchCancel;
     QFont m_monoFont, m_italicFont;
 };

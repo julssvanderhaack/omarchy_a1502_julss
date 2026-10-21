@@ -7,6 +7,7 @@ class Sidebar : public QTreeWidget {
 public:
     explicit Sidebar(QWidget *parent = nullptr);
     void reload();
+    void applySizes();   // text, icon size and spacing from the settings
     void setCurrentPath(const QString &path);
     void addBookmark(const QString &path, const QString &label = {});
     static QString bookmarksFile();

@@ -10,6 +10,7 @@ class SettingsDialog : public QDialog {
     Q_OBJECT
 public:
     explicit SettingsDialog(QWidget *parent = nullptr);
+    void showPage(const QString &title);
 
 private:
     QFormLayout *page(const QString &title, const QString &glyph);

@@ -1,10 +1,12 @@
 #include "fileops.h"
+#include "undo.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QHash>
 #include <QMimeData>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -32,6 +34,8 @@ QString Job::title() const
     case Delete: return QString::fromUtf8("Eliminando %1").arg(what);
     case EmptyTrash: return QString::fromUtf8("Vaciando la papelera");
     case Restore: return QString::fromUtf8("Restaurando %1").arg(what);
+    case CopyTo: return QString::fromUtf8("Copiando %1").arg(what);
+    case MoveTo: return QString::fromUtf8("Moviendo %1").arg(what);
     }
     return {};
 }
@@ -64,6 +68,12 @@ void Job::scan(const QString &path)
     }
 }
 
+void Job::done(const QString &src, const QString &dst)
+{
+    m_created << dst;
+    m_pairs.append({src, dst});
+}
+
 void Job::run()
 {
     if (m_kind == EmptyTrash) {
@@ -71,15 +81,42 @@ void Job::run()
         for (const QString &n : QDir(FileOps::trashFiles()).entryList(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden | QDir::System))
             m_srcs << FileOps::trashFiles() + '/' + n;
     }
-    if (m_kind == Copy || m_kind == Move || m_kind == Delete || m_kind == EmptyTrash)
+    if (m_kind == Copy || m_kind == Move || m_kind == Delete || m_kind == EmptyTrash || m_kind == CopyTo || m_kind == MoveTo)
         for (const QString &s : m_srcs) scan(s);
     else m_totalFiles = m_srcs.size();
     emit progress(0, m_totalBytes, 0, m_totalFiles, {});
 
-    for (const QString &src : m_srcs) {
+    for (int i = 0; i < m_srcs.size(); ++i) {
+        const QString &src = m_srcs[i];
         if (m_cancel) break;
         const QString name = QFileInfo(src).fileName();
         switch (m_kind) {
+        case CopyTo:
+        case MoveTo: {
+            const bool move = m_kind == MoveTo;
+            QString dst = m_targets.value(i);
+            if (dst.isEmpty() || dst == src) break;
+            if ((dst + '/').startsWith(src + '/')) {
+                m_errors << QString::fromUtf8("No se puede copiar «%1» dentro de sí misma.").arg(name);
+                break;
+            }
+            QDir().mkpath(QFileInfo(dst).absolutePath());
+            bool skip = false;
+            dst = resolve(src, dst, skip);
+            if (skip) break;
+            if (move && ::rename(enc(src).constData(), enc(dst).constData()) == 0) {
+                done(src, dst);
+                ++m_doneFiles;
+                emit progress(m_doneBytes, m_totalBytes, m_doneFiles, m_totalFiles, name);
+                break;
+            }
+            if (move && errno != EXDEV && errno != ENOTEMPTY && errno != EEXIST) {
+                m_errors << QString::fromUtf8("No se pudo mover «%1»: %2").arg(name, errText());
+                break;
+            }
+            if (copyTree(src, dst, move)) done(src, dst);
+            break;
+        }
         case Copy:
         case Move: {
             QString dst = m_dest + '/' + name;
@@ -94,7 +131,7 @@ void Job::run()
             dst = resolve(src, dst, skip);
             if (skip) break;
             if (m_kind == Move && ::rename(enc(src).constData(), enc(dst).constData()) == 0) {
-                m_created << dst;
+                done(src, dst);
                 ++m_doneFiles;
                 emit progress(m_doneBytes, m_totalBytes, m_doneFiles, m_totalFiles, name);
                 break;
@@ -103,14 +140,14 @@ void Job::run()
                 m_errors << QString::fromUtf8("No se pudo mover «%1»: %2").arg(name, errText());
                 break;
             }
-            if (copyTree(src, dst, m_kind == Move)) m_created << dst;
+            if (copyTree(src, dst, m_kind == Move)) done(src, dst);
             break;
         }
         case Link: {
             QString dst = m_dest + '/' + FileOps::uniqueName(m_dest, name);
             if (::symlink(enc(src).constData(), enc(dst).constData()) != 0)
                 m_errors << QString::fromUtf8("No se pudo crear el enlace a «%1»: %2").arg(name, errText());
-            else m_created << dst;
+            else done(src, dst);
             ++m_doneFiles;
             break;
         }
@@ -130,10 +167,10 @@ void Job::run()
             if (of.exists() || of.isSymLink()) orig = of.absolutePath() + '/' + FileOps::uniqueName(of.absolutePath(), of.fileName());
             if (::rename(enc(src).constData(), enc(orig).constData()) == 0) {
                 QFile::remove(FileOps::trashInfo() + '/' + name + ".trashinfo");
-                m_created << orig;
+                done(src, orig);
             } else if (errno == EXDEV && copyTree(src, orig, true)) {
                 QFile::remove(FileOps::trashInfo() + '/' + name + ".trashinfo");
-                m_created << orig;
+                done(src, orig);
             } else {
                 m_errors << QString::fromUtf8("No se pudo restaurar «%1»: %2").arg(name, errText());
             }
@@ -328,6 +365,11 @@ FileOps &FileOps::get()
 
 Job *FileOps::startJob(Job *j)
 {
+    // Finished copies, moves, links and restores can be undone.
+    static const QHash<int, Undo::Type> undoable = {
+        {Job::Copy, Undo::Copy}, {Job::Move, Undo::Move}, {Job::Link, Undo::Link}, {Job::Restore, Undo::Restore}};
+    if (m_recording && undoable.contains(j->kind()))
+        connect(j, &Job::finished, &Undo::get(), [j, type = undoable.value(j->kind())] { Undo::get().record(type, j->pairs()); });
     emit jobStarted(j);
     j->start();
     return j;
@@ -339,6 +381,20 @@ Job *FileOps::link(const QStringList &s, const QString &d) { return startJob(new
 Job *FileOps::deleteForever(const QStringList &p) { return startJob(new Job(Job::Delete, p, {})); }
 Job *FileOps::emptyTrash() { return startJob(new Job(Job::EmptyTrash, {}, {})); }
 Job *FileOps::restore(const QStringList &p) { return startJob(new Job(Job::Restore, p, {})); }
+
+Job *FileOps::copyTo(const QStringList &s, const QStringList &t)
+{
+    auto *j = new Job(Job::CopyTo, s, {});
+    j->setTargets(t);
+    return startJob(j);
+}
+
+Job *FileOps::moveTo(const QStringList &s, const QStringList &t)
+{
+    auto *j = new Job(Job::MoveTo, s, {});
+    j->setTargets(t);
+    return startJob(j);
+}
 
 QString FileOps::trashFiles() { return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/Trash/files"; }
 QString FileOps::trashInfo() { return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation) + "/Trash/info"; }
@@ -355,13 +411,17 @@ QString FileOps::originalPath(const QString &trashed)
     return {};
 }
 
-QStringList FileOps::trash(const QStringList &paths)
+QStringList FileOps::trash(const QStringList &paths, QList<QPair<QString, QString>> *done)
 {
     QStringList errors;
+    QList<QPair<QString, QString>> moved;
     for (const QString &p : paths) {
         QFile f(p);
         if (!f.moveToTrash()) errors << QString::fromUtf8("No se pudo mover a la papelera «%1»: %2").arg(QFileInfo(p).fileName(), f.errorString());
+        else moved.append({p, f.fileName()});   // QFile now names the trashed copy
     }
+    if (m_recording) Undo::get().record(Undo::Trash, moved);
+    if (done) *done = moved;
     return errors;
 }
 

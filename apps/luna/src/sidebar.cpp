@@ -2,8 +2,10 @@
 #include "fileops.h"
 #include "icons.h"
 #include "remote.h"
+#include "places.h"
 #include "settings.h"
 #include "theme.h"
+#include <QApplication>
 #include <QContextMenuEvent>
 #include <QDir>
 #include <QFile>
@@ -36,8 +38,10 @@ public:
     QSize sizeHint(const QStyleOptionViewItem &o, const QModelIndex &i) const override
     {
         QSize s = QStyledItemDelegate::sizeHint(o, i);
-        if (i.data(KindRole).toInt() == Header) return QSize(s.width(), s.height() + 10);
-        return QSize(s.width(), std::max(s.height(), 30) + (i.data(UsageRole).isValid() ? 6 : 0));
+        if (i.data(KindRole).toInt() == Header) return QSize(s.width(), s.height() + 4 + 3 * Settings::get().sidebarSpacing);
+        static const int pad[] = {4, 10, 16};   // compacto, normal, amplio
+        const int row = Settings::get().sidebarIconSize + pad[std::clamp(Settings::get().sidebarSpacing, 0, 2)];
+        return QSize(s.width(), std::max(s.height(), row) + (i.data(UsageRole).isValid() ? 6 : 0));
     }
     void paint(QPainter *p, const QStyleOptionViewItem &o, const QModelIndex &i) const override
     {
@@ -48,7 +52,7 @@ public:
             f.setPointSizeF(f.pointSizeF() * 0.85);
             p->setFont(f);
             p->setPen(Theme::get().fgDim);
-            p->drawText(o.rect.adjusted(10, 8, 0, 0), Qt::AlignLeft | Qt::AlignVCenter, i.data().toString().toUpper());
+            p->drawText(o.rect.adjusted(10, 2 + 2 * Settings::get().sidebarSpacing, 0, 0), Qt::AlignLeft | Qt::AlignVCenter, i.data().toString().toUpper());
             p->restore();
             return;
         }
@@ -58,7 +62,8 @@ public:
         QStyledItemDelegate::paint(p, opt, i);
         if (usage) {
             double f = i.data(UsageRole).toDouble();
-            QRect bar(o.rect.left() + 36, o.rect.bottom() - 7, o.rect.width() - 72, 3);
+            const int indent = Settings::get().sidebarIconSize + 16;   // under the text, not the icon
+            QRect bar(o.rect.left() + indent, o.rect.bottom() - 7, o.rect.width() - indent - 36, 3);
             p->save();
             p->setPen(Qt::NoPen);
             p->setBrush(Theme::get().muted);
@@ -68,7 +73,8 @@ public:
             p->restore();
         }
         if (i.data(MountedRole).toBool()) {
-            QRect r(o.rect.right() - 28, o.rect.top() + (o.rect.height() - 6 - 18) / 2 + (usage ? 0 : 3), 18, 18);
+            const int e = std::min(18, Settings::get().sidebarIconSize + 2);
+            QRect r(o.rect.right() - 10 - e, o.rect.top() + (o.rect.height() - (usage ? 6 : 0) - e) / 2, e, e);
             Icons::get().ui("eject").paint(p, r);
         }
     }
@@ -82,8 +88,8 @@ Sidebar::Sidebar(QWidget *parent) : QTreeWidget(parent)
     setHeaderHidden(true);
     setRootIsDecorated(false);
     setIndentation(0);
-    setIconSize(QSize(20, 20));
     setItemDelegate(new Delegate(this));
+    applySizes();
     setDragDropMode(QAbstractItemView::DragDrop);
     setAcceptDrops(true);
     setDropIndicatorShown(true);
@@ -181,6 +187,16 @@ void Sidebar::addBookmark(const QString &path, const QString &label)
     reload();
 }
 
+void Sidebar::applySizes()
+{
+    const Settings &s = Settings::get();
+    setIconSize(QSize(s.sidebarIconSize, s.sidebarIconSize));
+    QFont f = QApplication::font(this);   // the class font the platform theme gives tree views
+    f.setPointSizeF(s.sidebarFontPt > 0 ? s.sidebarFontPt : std::max(7.0, f.pointSizeF() - 1));
+    setFont(f);
+    scheduleDelayedItemsLayout();   // rows change height with the sizes
+}
+
 void Sidebar::reload()
 {
     const Settings &s = Settings::get();
@@ -208,6 +224,8 @@ void Sidebar::reload()
             if (path.isEmpty() || path == home || !QFileInfo(path).isDir()) continue;
             item(m_places, QString::fromUtf8(p.name), path, Icons::get().sidebar(p.kind), Place);
         }
+        item(m_places, QString::fromUtf8("Recientes"), Places::recent, Icons::get().sidebar("recent"), Place);
+        item(m_places, QString::fromUtf8("Destacados"), Places::starred, Icons::get().sidebar("starred"), Place);
         const bool full = !QDir(FileOps::trashFiles()).isEmpty(QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden);
         item(m_places, QString::fromUtf8("Papelera"), FileOps::trashFiles(), Icons::get().sidebar(full ? "trash-full" : "trash"), Place);
     }
