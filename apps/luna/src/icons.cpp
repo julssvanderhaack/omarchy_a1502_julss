@@ -16,6 +16,26 @@
 
 namespace {
 
+// Rendered pixmaps per (size, scale, mode): views ask for the same few on
+// every repaint of every item.
+class PixmapCache {
+public:
+    template <typename Render>
+    QPixmap get(const QSize &size, qreal scale, QIcon::Mode mode, Render render)
+    {
+        const quint64 key = quint64(size.width()) << 40 | quint64(size.height()) << 24 | quint64(qRound(scale * 100)) << 4 | quint64(mode);
+        auto it = m_px.constFind(key);
+        if (it != m_px.constEnd()) return *it;
+        if (m_px.size() > 24) m_px.clear();
+        const QPixmap px = render();
+        m_px.insert(key, px);
+        return px;
+    }
+
+private:
+    QHash<quint64, QPixmap> m_px;
+};
+
 // Paints one Nerd Font glyph, crisp at any size.
 class GlyphEngine : public QIconEngine {
 public:
@@ -35,26 +55,31 @@ public:
     }
     QPixmap pixmap(const QSize &size, QIcon::Mode mode, QIcon::State state) override
     {
-        QPixmap px(size);
-        px.fill(Qt::transparent);
-        QPainter p(&px);
-        paint(&p, QRect(QPoint(), size), mode, state);
-        return px;
+        return m_cache.get(size, 1.0, mode, [&] {
+            QPixmap px(size);
+            px.fill(Qt::transparent);
+            QPainter p(&px);
+            paint(&p, QRect(QPoint(), size), mode, state);
+            return px;
+        });
     }
     QPixmap scaledPixmap(const QSize &size, QIcon::Mode mode, QIcon::State state, qreal scale) override
     {
-        QPixmap px(size * scale);
-        px.setDevicePixelRatio(scale);
-        px.fill(Qt::transparent);
-        QPainter p(&px);
-        paint(&p, QRect(QPoint(), size), mode, state);
-        return px;
+        return m_cache.get(size, scale, mode, [&] {
+            QPixmap px(size * scale);
+            px.setDevicePixelRatio(scale);
+            px.fill(Qt::transparent);
+            QPainter p(&px);
+            paint(&p, QRect(QPoint(), size), mode, state);
+            return px;
+        });
     }
     QIconEngine *clone() const override { return new GlyphEngine(m_text, m_color); }
 
 private:
     QString m_text;
     QColor m_color;
+    PixmapCache m_cache;
 };
 
 QString gsettingsIconTheme()
@@ -83,20 +108,23 @@ public:
     QPixmap pixmap(const QSize &size, QIcon::Mode mode, QIcon::State state) override { return scaledPixmap(size, mode, state, 1.0); }
     QPixmap scaledPixmap(const QSize &size, QIcon::Mode mode, QIcon::State state, qreal scale) override
     {
-        QPixmap px = m_base.pixmap(size, scale, QIcon::Normal, state);
-        if (px.isNull()) return px;
-        QPainter p(&px);
-        p.setCompositionMode(QPainter::CompositionMode_SourceIn);
-        QColor c = m_color;
-        if (mode == QIcon::Disabled) c.setAlpha(110);
-        p.fillRect(QRect(QPoint(), px.size()), c);
-        return px;
+        return m_cache.get(size, scale, mode, [&] {
+            QPixmap px = m_base.pixmap(size, scale, QIcon::Normal, state);
+            if (px.isNull()) return px;
+            QPainter p(&px);
+            p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+            QColor c = m_color;
+            if (mode == QIcon::Disabled) c.setAlpha(110);
+            p.fillRect(QRect(QPoint(), px.size()), c);
+            return px;
+        });
     }
     QIconEngine *clone() const override { return new TintEngine(m_base, m_color); }
 
 private:
     QIcon m_base;
     QColor m_color;
+    PixmapCache m_cache;
 };   // color: 0 fg,1 accent,2 magenta,3 cyan,4 yellow,5 red,6 green,7 blue,8 orange,9 dim
 
 } // namespace

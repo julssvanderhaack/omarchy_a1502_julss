@@ -1,5 +1,7 @@
 #include "settings.h"
+#include <QCoreApplication>
 #include <QSettings>
+#include <QTimer>
 
 Settings &Settings::get()
 {
@@ -17,6 +19,25 @@ int Settings::listIconSizeFor(int zoom)
 {
     static const int sizes[] = {16, 22, 32, 48};
     return sizes[std::clamp(zoom, 0, 3)];
+}
+
+void Settings::changed()
+{
+    // Zooming with the wheel changes settings many times a second: write once.
+    if (!m_savePending) {
+        m_savePending = true;
+        QTimer::singleShot(500, this, [this] {
+            if (m_savePending) save();
+        });
+        static bool hooked = false;
+        if (!hooked) {
+            hooked = true;
+            connect(qApp, &QCoreApplication::aboutToQuit, this, [this] {
+                if (m_savePending) save();
+            });
+        }
+    }
+    emit updated();
 }
 
 void Settings::load()
@@ -68,6 +89,7 @@ void Settings::load()
 
 void Settings::save() const
 {
+    m_savePending = false;
     QSettings q("luna", "luna");
     q.setValue("view/mode", int(viewMode));
     q.setValue("view/iconZoom", iconZoom);

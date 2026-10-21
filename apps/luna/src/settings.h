@@ -12,7 +12,7 @@ public:
     static Settings &get();
     void load();
     void save() const;
-    void changed() { save(); emit updated(); }
+    void changed();   // applies at once, writes to disk a moment later
 
     // Vista
     ViewMode viewMode = ViewMode::Icons;
@@ -64,4 +64,7 @@ public:
 
 signals:
     void updated();
+
+private:
+    mutable bool m_savePending = false;
 };

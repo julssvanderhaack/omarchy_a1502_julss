@@ -3,6 +3,8 @@
 // and merges changes in place so views keep selection and scroll.
 #pragma once
 #include <QAbstractItemModel>
+#include <QFont>
+#include <QCollator>
 #include <QFileSystemWatcher>
 #include <QHash>
 #include <QSet>
@@ -12,6 +14,7 @@
 #include <QUrl>
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <vector>
 
 struct FileEntry {
@@ -48,6 +51,9 @@ public:
     QString filePath(const QModelIndex &idx) const;
     const FileEntry *entry(const QModelIndex &idx) const;
     QModelIndex indexForPath(const QString &path) const;
+    // Precomputed natural-order key of the name (what the proxy sorts by).
+    const QCollatorSortKey &nameKey(const QModelIndex &idx) const;
+    static QCollator &collator();
     int fileCount() const;
     qint64 totalSize() const;
 
@@ -76,7 +82,7 @@ public:
     static QString userName(quint32 uid);
     static QString groupName(quint32 gid);
     static QString mimeComment(const QString &mime);
-    static bool listDirectory(const QString &path, std::vector<FileEntry> &out, QString *err);
+    static bool listDirectory(const QString &path, std::vector<FileEntry> &out, QString *err, QStringList *deferMime = nullptr);
     static FileEntry statPath(const QString &path, bool *ok = nullptr);
     static void shutdown();   // drop queued listings and wait for running ones
 
@@ -94,14 +100,20 @@ private:
         Node *parent = nullptr;
         std::vector<std::unique_ptr<Node>> kids;
         bool loaded = false, loading = false;
+        mutable int rowHint = 0;                          // position in parent->kids
+        mutable std::optional<QCollatorSortKey> key;      // built on first sort
+        mutable QString dateText;                         // formatted mtime
+        mutable quint32 dateGen = 0;                      // formatGeneration() it was made in
         int row() const;
     };
+    void renumber(Node *n, int from = 0);
     Node *nodeOf(const QModelIndex &idx) const;
     QModelIndex indexOf(Node *n, int column = 0) const;
     QString pathOf(const Node *n) const;
     void load(Node *n);
     void deliver(const QString &path, quint64 gen, std::vector<FileEntry> entries, const QString &err);
     void deliverCounts(const QString &path, quint64 gen, QHash<QString, qint64> counts);
+    void deliverMimes(const QString &path, quint64 gen, QHash<QString, QString> mimes);
     void merge(Node *n, std::vector<FileEntry> &entries);
     void indexNode(Node *n);
     void unindexNode(Node *n);
@@ -116,12 +128,14 @@ private:
     quint64 m_gen = 0;           // bumps on setRoot so stale listings are dropped
     QHash<QString, Node *> m_byPath;
     QFileSystemWatcher m_watcher;
+    QSet<QString> m_watched;
     QSet<QString> m_dirty;
     QTimer m_dirtyTimer;
     bool m_loading = false;
     QString m_error;
     bool m_searchMode = false;
     std::shared_ptr<std::atomic<bool>> m_searchCancel;
+    QFont m_monoFont, m_italicFont;
 };
 
 // Sorting (folders first, natural order) and filtering (hidden, quick filter).

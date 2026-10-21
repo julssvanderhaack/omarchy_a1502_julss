@@ -567,7 +567,12 @@ void MainWindow::applySettings()
     lastStyle = s.iconStyle;
     lastTheme = s.iconTheme;
     lastCounts = s.showItemCounts;
-    m_sidebar->reload();
+    // Rebuilding the sidebar stats every mount and runs lsblk: only when
+    // something it shows changed.
+    static QList<int> lastSidebar;
+    const QList<int> sidebar = {s.showPlaces, s.showBookmarks, s.showDevices};
+    if (iconsChanged || sidebar != lastSidebar) m_sidebar->reload();
+    lastSidebar = sidebar;
     layoutSidebar();
     applyHeaderStyle();
     syncHeader();
