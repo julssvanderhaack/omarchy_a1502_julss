@@ -114,7 +114,8 @@ QToolButton[role="tiny"] { padding: 1px 6px; font-size: 11px; color: %DIM%; back
 QToolButton[role="tiny"]:hover { color: %FG%; background: %BGL%; }
 QToolButton::menu-indicator { image: none; width: 0; }
 QTabWidget::pane { border: none; }
-QTabBar::tab { background: transparent; color: %DIM%; padding: 8px 16px; border-bottom: 2px solid transparent; font-size: 14px; }
+QTabBar { qproperty-drawBase: 0; border: none; }
+QTabBar::tab { background: transparent; color: %DIM%; padding: 8px 16px; margin: 0; border: none; border-bottom: 2px solid transparent; font-size: 14px; }
 QTabBar::tab:selected { color: %FG%; border-bottom: 2px solid %ACC%; }
 QTabBar::tab:hover { color: %FG%; }
 QScrollArea { border: none; }
