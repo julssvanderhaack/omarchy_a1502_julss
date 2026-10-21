@@ -15,6 +15,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QPalette>
+#include <QPixmapCache>
 #include <QProxyStyle>
 #include <QStyleFactory>
 #include <QAbstractItemView>
@@ -39,11 +40,17 @@ public:
 
 int main(int argc, char **argv)
 {
+    QElapsedTimer startup;
+    startup.start();
     QApplication app(argc, argv);
     QApplication::setApplicationName("luna");
     QApplication::setApplicationDisplayName("Luna");
     QGuiApplication::setDesktopFileName("luna");
     QApplication::setWindowIcon(QIcon::fromTheme("luna", QIcon(":/luna.svg")));
+
+    // Scaled thumbnails and icons live in QPixmapCache; the default 10 MB
+    // holds a screenful at most, so scrolling a photo folder rescaled them.
+    QPixmapCache::setCacheLimit(64 * 1024);
 
     Theme &th = Theme::get();
     th.load();
@@ -117,6 +124,47 @@ int main(int argc, char **argv)
                 qApp->quit();
             });
             m->startSearch(qEnvironmentVariable("LUNA_SEARCHTEST"));
+        });
+    }
+    // Listing benchmark: LUNA_LISTTEST=1 luna <folder> (QT_QPA_PLATFORM=offscreen works)
+    if (qEnvironmentVariableIsSet("LUNA_LISTTEST")) {
+        auto *t = new QElapsedTimer;
+        t->start();
+        fprintf(stderr, "ventana creada a los %lld ms del arranque\n", qlonglong(startup.elapsed()));
+        auto *m = w->pane()->findChild<FsModel *>();
+        QObject::connect(m, &FsModel::rootLoaded, w, [w, t] {
+            fprintf(stderr, "listado entregado a los %lld ms\n", qlonglong(t->elapsed()));
+            QTimer::singleShot(0, w, [w, t] {
+                w->repaint();
+                fprintf(stderr, "vista pintada a los %lld ms\n", qlonglong(t->elapsed()));
+                auto *proxy = w->pane()->findChild<SortProxy *>();
+                auto step = [w](const char *what, const std::function<void()> &f) {
+                    QElapsedTimer s;
+                    s.start();
+                    f();
+                    w->repaint();
+                    fprintf(stderr, "%s: %lld ms\n", what, qlonglong(s.elapsed()));
+                };
+                step("ordenar por tamaño", [proxy] { proxy->sort(FsModel::Size); });
+                step("ordenar por tipo", [proxy] { proxy->sort(FsModel::Type); });
+                step("ordenar por nombre", [proxy] { proxy->sort(FsModel::Name); });
+                step("filtrar «12»", [proxy] { proxy->setQuickFilter("12"); });
+                step("quitar filtro", [proxy] { proxy->setQuickFilter({}); });
+                step("seleccionar todo", [w] { w->pane()->selectAll(); });
+                step("vista detallada", [w] { w->pane()->setViewMode(ViewMode::Details); });
+                step("vista iconos", [w] { w->pane()->setViewMode(ViewMode::Icons); });
+                QTimer::singleShot(1500, w, [w] {
+                    auto *m = w->pane()->findChild<FsModel *>();
+                    int scripts = 0, counted = 0;
+                    for (int r = 0; r < m->rowCount(); ++r) {
+                        const FileEntry *e = m->entry(m->index(r, 0));
+                        scripts += !e->isDir && !e->name.contains(QLatin1Char('.')) && e->mime.endsWith(QLatin1String("shellscript"));
+                        counted += e->isDir && e->size >= 0;
+                    }
+                    fprintf(stderr, "scripts detectados por contenido: %d, carpetas con recuento: %d\n", scripts, counted);
+                    qApp->quit();
+                });
+            });
         });
     }
     // Move test: LUNA_MOVETEST=1 luna <dir with a.txt b.txt destino/>

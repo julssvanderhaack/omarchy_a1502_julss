@@ -18,6 +18,7 @@
 #include <QMimeData>
 #include <QMimeDatabase>
 #include <QRegularExpression>
+#include <QStandardPaths>
 #include <QThreadPool>
 #include <QUrl>
 #include <atomic>
@@ -32,6 +33,7 @@
 #include <sys/resource.h>
 #include <sys/syscall.h>
 #include <thread>
+#include <unordered_map>
 
 namespace {
 
@@ -45,16 +47,127 @@ QThreadPool &listPool()
     return *p;
 }
 
-QString mimeFor(const QString &path, const QString &name, bool isDir)
+// QMimeDatabase tries every glob under one global lock (~12 µs a name, most
+// of a listing). Nearly all globs are "*.ext", which only look at the name
+// from its first dot on, so that tail is an exact cache key unless one of the
+// few globs that look at the whole name (Makefile, README*, *~…) applies.
+// For the same reason a name without a dot that none of those match has no
+// type by name at all.
+struct NameGlobs {
+    struct Wild {
+        QByteArray glob;
+        bool cs;
+        QChar first, last;   // literal first/last character, to skip fnmatch
+    };
+    bool ok = false;
+    QSet<QString> literals;   // lower-case
+    std::vector<Wild> wild;
+};
+
+const NameGlobs &nameGlobs()
+{
+    static const NameGlobs g = [] {
+        NameGlobs g;
+        auto literal = [](char c) { return c != '*' && c != '?' && c != '[' && c != ']'; };
+        for (const QString &f : QStandardPaths::locateAll(QStandardPaths::GenericDataLocation, "mime/globs2")) {
+            QFile file(f);
+            if (!file.open(QIODevice::ReadOnly)) continue;
+            g.ok = true;
+            while (!file.atEnd()) {
+                const QByteArray line = file.readLine().trimmed();
+                if (line.isEmpty() || line.startsWith('#')) continue;
+                const QList<QByteArray> parts = line.split(':');   // weight:type:glob[:flags]
+                if (parts.size() < 3 || parts[2].isEmpty()) continue;
+                const QByteArray &glob = parts[2];
+                if (glob.startsWith("*.")) continue;
+                if (glob.contains('*') || glob.contains('?') || glob.contains('[')) {
+                    NameGlobs::Wild w{glob, parts.size() > 3 && parts[3].contains("cs"), {}, {}};
+                    if (literal(glob.front())) w.first = QChar(glob.front()).toLower();
+                    if (literal(glob.back())) w.last = QChar(glob.back()).toLower();
+                    g.wild.push_back(w);
+                } else {
+                    g.literals.insert(QString::fromUtf8(glob).toLower());
+                }
+            }
+        }
+        return g;
+    }();
+    return g;
+}
+
+QMimeType mimeByName(const QString &name)
+{
+    static thread_local QMimeDatabase db;
+    static thread_local QHash<QString, QMimeType> byTail;
+    const NameGlobs &g = nameGlobs();
+    if (!g.ok || name.isEmpty()) return db.mimeTypeForFile(name, QMimeDatabase::MatchExtension);
+    bool special = g.literals.contains(name.toLower());
+    const QChar first = name.front().toLower(), last = name.back().toLower();
+    for (size_t i = 0; i < g.wild.size() && !special; ++i) {
+        const NameGlobs::Wild &w = g.wild[i];
+        if ((!w.first.isNull() && w.first != first) || (!w.last.isNull() && w.last != last)) continue;
+        special = fnmatch(w.glob.constData(), name.toUtf8().constData(), w.cs ? 0 : FNM_CASEFOLD) == 0;
+    }
+    if (special) return db.mimeTypeForFile(name, QMimeDatabase::MatchExtension);
+    const qsizetype dot = name.indexOf('.');
+    if (dot < 0) {
+        static thread_local const QMimeType none = db.mimeTypeForName(QStringLiteral("application/octet-stream"));
+        return none;
+    }
+    // Qt does not apply "*.old" to a name that is just ".old": hidden names
+    // only share a cache entry with themselves ('/' never occurs in a name).
+    const QString tail = dot == 0 ? '/' + name : name.mid(dot);
+    auto it = byTail.constFind(tail);
+    if (it != byTail.constEnd()) return *it;
+    if (byTail.size() > 4096) byTail.clear();
+    const QMimeType t = db.mimeTypeForFile(name, QMimeDatabase::MatchExtension);
+    byTail.insert(tail, t);
+    return t;
+}
+
+// Content sniffing opens and reads the file, so with `later` set it is left
+// to the caller (the lister does it after the folder is already on screen).
+QString mimeFor(const QString &dirPath, const QString &name, bool isDir, bool *later = nullptr)
 {
     if (isDir) return QStringLiteral("inode/directory");
     static thread_local QMimeDatabase db;
-    QMimeType t = db.mimeTypeForFile(name, QMimeDatabase::MatchExtension);
-    if (t.isDefault() && !name.contains('.')) t = db.mimeTypeForFile(path, QMimeDatabase::MatchContent);
+    QMimeType t = mimeByName(name);
+    if (t.isDefault() && !name.contains('.')) {
+        if (later) {
+            *later = true;
+            return t.name();
+        }
+        t = db.mimeTypeForFile(dirPath + '/' + name, QMimeDatabase::MatchContent);
+    }
     return t.name();
 }
 
-FileEntry fromStat(const QString &dirPath, const QString &name, int dirfd, const char *cname)
+QString sniffMime(const QString &path)
+{
+    static thread_local QMimeDatabase db;
+    return db.mimeTypeForFile(path, QMimeDatabase::MatchContent).name();
+}
+
+// Bumped when the date settings change or the day turns, so the cached
+// "hoy"/"ayer" texts get rebuilt.
+quint32 g_formatGen = 1;
+
+void armMidnightTimer()
+{
+    static QTimer *t = [] {
+        auto *timer = new QTimer(QCoreApplication::instance());
+        timer->setSingleShot(true);
+        QObject::connect(timer, &QTimer::timeout, timer, [timer] {
+            ++g_formatGen;
+            armMidnightTimer();
+        });
+        return timer;
+    }();
+    const QDateTime now = QDateTime::currentDateTime();
+    t->start(int(std::min<qint64>(now.msecsTo(QDateTime(now.date().addDays(1), QTime(0, 0, 1))), 24 * 3600 * 1000)));
+}
+
+FileEntry fromStat(const QString &dirPath, const QString &name, int dirfd, const char *cname, QStringList *deferMime = nullptr)
 {
     FileEntry e;
     e.name = name;
@@ -79,7 +192,9 @@ FileEntry fromStat(const QString &dirPath, const QString &name, int dirfd, const
     e.mode = st.st_mode;
     e.uid = st.st_uid;
     e.gid = st.st_gid;
-    e.mime = e.broken ? QStringLiteral("inode/symlink") : mimeFor(dirPath + '/' + name, name, e.isDir);
+    bool later = false;
+    e.mime = e.broken ? QStringLiteral("inode/symlink") : mimeFor(dirPath, name, e.isDir, deferMime && S_ISREG(st.st_mode) ? &later : nullptr);
+    if (later) deferMime->append(name);
     return e;
 }
 
@@ -101,13 +216,14 @@ qint64 countEntries(const QString &path)
 class Lister : public QRunnable {
 public:
     Lister(QString path, quint64 gen, std::function<void(std::vector<FileEntry>, QString)> done,
-           std::function<void(QHash<QString, qint64>)> counts)
-        : m_path(std::move(path)), m_gen(gen), m_done(std::move(done)), m_counts(std::move(counts)) {}
+           std::function<void(QHash<QString, QString>)> mimes, std::function<void(QHash<QString, qint64>)> counts)
+        : m_path(std::move(path)), m_gen(gen), m_done(std::move(done)), m_mimes(std::move(mimes)), m_counts(std::move(counts)) {}
     void run() override
     {
         std::vector<FileEntry> entries;
         QString err;
-        FsModel::listDirectory(m_path, entries, &err);
+        QStringList sniff;
+        FsModel::listDirectory(m_path, entries, &err, &sniff);
         QStringList dirs;
         for (auto &e : entries)
             if (e.isDir) dirs << e.name;
@@ -116,10 +232,24 @@ public:
             QMetaObject::invokeMethod(app, [done, entries = std::move(entries), err]() mutable { done(std::move(entries), err); },
                                       Qt::QueuedConnection);
         }
-        if (!Settings::get().showItemCounts || dirs.isEmpty() || Remote::isRemotePath(m_path)) return;
-        QHash<QString, qint64> counts;
         QElapsedTimer t;
         t.start();
+        // Second pass for files without extension: look inside them.
+        if (!sniff.isEmpty()) {
+            QHash<QString, QString> mimes;
+            for (const QString &n : sniff) {
+                const QString m = sniffMime(m_path + '/' + n);
+                if (m != QLatin1String("application/octet-stream")) mimes.insert(n, m);
+                if (t.elapsed() > 3000) break;   // network mounts
+            }
+            auto cb = m_mimes;
+            if (!mimes.isEmpty())
+                if (auto *app = QCoreApplication::instance())
+                    QMetaObject::invokeMethod(app, [cb, mimes = std::move(mimes)]() mutable { cb(std::move(mimes)); }, Qt::QueuedConnection);
+        }
+        if (!Settings::get().showItemCounts || dirs.isEmpty() || Remote::isRemotePath(m_path)) return;
+        QHash<QString, qint64> counts;
+        t.restart();
         for (const QString &d : dirs) {
             counts.insert(d, countEntries(m_path + '/' + d));
             if (t.elapsed() > 3000) break;   // network mounts or huge trees
@@ -133,6 +263,7 @@ private:
     QString m_path;
     quint64 m_gen;
     std::function<void(std::vector<FileEntry>, QString)> m_done;
+    std::function<void(QHash<QString, QString>)> m_mimes;
     std::function<void(QHash<QString, qint64>)> m_counts;
 };
 
@@ -145,7 +276,7 @@ void FsModel::shutdown()
 }
 
 // ------------------------------------------------------------- static helpers
-bool FsModel::listDirectory(const QString &path, std::vector<FileEntry> &out, QString *err)
+bool FsModel::listDirectory(const QString &path, std::vector<FileEntry> &out, QString *err, QStringList *deferMime)
 {
     QByteArray p = QFile::encodeName(path);
     int fd = open(p.constData(), O_RDONLY | O_DIRECTORY | O_CLOEXEC);
@@ -163,7 +294,7 @@ bool FsModel::listDirectory(const QString &path, std::vector<FileEntry> &out, QS
         const char *s = de->d_name;
         if (s[0] == '.' && (s[1] == 0 || (s[1] == '.' && s[2] == 0))) continue;
         QString name = QFile::decodeName(s);
-        out.push_back(fromStat(path, name, fd, s));
+        out.push_back(fromStat(path, name, fd, s, deferMime));
     }
     closedir(d);
     return true;
@@ -197,7 +328,7 @@ QString FsModel::formatSize(qint64 b)
     double v = b;
     int u = 0;
     while (v >= base && u < 5) v /= base, ++u;
-    QLocale loc(QLocale::Spanish, QLocale::Spain);
+    static const QLocale loc(QLocale::Spanish, QLocale::Spain);
     QString num = u == 0 ? QString::number(b) : loc.toString(v, 'f', v < 10 ? 1 : 0);
     return num + " " + (iec ? bi[u] : si[u]);
 }
@@ -206,7 +337,7 @@ QString FsModel::formatDate(qint64 secs)
 {
     if (secs <= 0) return {};
     QDateTime dt = QDateTime::fromSecsSinceEpoch(secs);
-    QLocale loc(QLocale::Spanish, QLocale::Spain);
+    static const QLocale loc(QLocale::Spanish, QLocale::Spain);
     switch (Settings::get().dateFormat) {
     case 1: return loc.toString(dt, "d MMM yyyy, HH:mm");
     case 2: return dt.toString("yyyy-MM-dd HH:mm");
@@ -270,9 +401,34 @@ int FsModel::Node::row() const
 {
     if (!parent) return 0;
     const auto &k = parent->kids;
+    if (rowHint < int(k.size()) && k[rowHint].get() == this) return rowHint;
     for (size_t i = 0; i < k.size(); ++i)
-        if (k[i].get() == this) return int(i);
+        if (k[i].get() == this) return rowHint = int(i);
     return -1;
+}
+
+void FsModel::renumber(Node *n, int from)
+{
+    for (int i = from; i < int(n->kids.size()); ++i) n->kids[i]->rowHint = i;
+}
+
+QCollator &FsModel::collator()
+{
+    static QCollator c = [] {
+        QCollator c(QLocale(QLocale::Spanish, QLocale::Spain));
+        c.setNumericMode(true);
+        c.setCaseSensitivity(Qt::CaseInsensitive);
+        c.setIgnorePunctuation(false);
+        return c;
+    }();
+    return c;
+}
+
+const QCollatorSortKey &FsModel::nameKey(const QModelIndex &idx) const
+{
+    const Node *n = nodeOf(idx);
+    if (!n->key) n->key.emplace(collator().sortKey(n->e.name));
+    return *n->key;
 }
 
 FsModel::FsModel(QObject *parent) : QAbstractItemModel(parent)
@@ -290,6 +446,10 @@ FsModel::FsModel(QObject *parent) : QAbstractItemModel(parent)
             }
     });
     connect(&Thumbs::get(), &Thumbs::ready, this, &FsModel::thumbReady);
+    connect(&Settings::get(), &Settings::updated, this, [] { ++g_formatGen; });
+    armMidnightTimer();
+    m_monoFont = QFont(Theme::get().mono);
+    m_italicFont.setItalic(true);
 }
 
 FsModel::~FsModel()
@@ -343,20 +503,21 @@ void FsModel::unindexNode(Node *n)
     for (auto &k : n->kids) unindexNode(k.get());
     const QString p = pathOf(n);
     if (m_byPath.value(p) == n) m_byPath.remove(p);
-    if (n->loaded) m_watcher.removePath(p);
+    if (n->loaded && m_watched.remove(p)) m_watcher.removePath(p);
 }
 
 void FsModel::watch(Node *n)
 {
     const QString p = pathOf(n);
-    if (!m_watcher.directories().contains(p)) m_watcher.addPath(p);
+    if (!m_watched.contains(p) && m_watcher.addPath(p)) m_watched.insert(p);
 }
 
 void FsModel::setRoot(const QString &path)
 {
     stopSearch();
     beginResetModel();
-    if (!m_watcher.directories().isEmpty()) m_watcher.removePaths(m_watcher.directories());
+    if (!m_watched.isEmpty()) m_watcher.removePaths(QStringList(m_watched.begin(), m_watched.end()));
+    m_watched.clear();
     m_byPath.clear();
     m_dirty.clear();
     m_root = std::make_unique<Node>();
@@ -394,6 +555,9 @@ void FsModel::load(Node *n)
         [self, path, gen](std::vector<FileEntry> entries, QString err) {
             if (self) self->deliver(path, gen, std::move(entries), err);
         },
+        [self, path, gen](QHash<QString, QString> mimes) {
+            if (self) self->deliverMimes(path, gen, std::move(mimes));
+        },
         [self, path, gen](QHash<QString, qint64> counts) {
             if (self) self->deliverCounts(path, gen, std::move(counts));
         });
@@ -417,10 +581,12 @@ void FsModel::deliver(const QString &path, quint64 gen, std::vector<FileEntry> e
         if (!entries.empty()) {
             QModelIndex parent = indexOf(n);
             beginInsertRows(parent, 0, int(entries.size()) - 1);
+            n->kids.reserve(entries.size());
             for (auto &e : entries) {
                 auto k = std::make_unique<Node>();
                 k->e = std::move(e);
                 k->parent = n;
+                k->rowHint = int(n->kids.size());
                 Node *raw = k.get();
                 n->kids.push_back(std::move(k));
                 indexNode(raw);
@@ -443,15 +609,41 @@ void FsModel::deliverCounts(const QString &path, quint64 gen, QHash<QString, qin
     if (gen != m_gen) return;
     Node *n = m_byPath.value(path);
     if (!n) return;
+    // One signal for the whole span: sorted by size, each one would make the
+    // proxy re-sort and the view lay everything out again.
+    int first = -1, last = -1;
     for (size_t i = 0; i < n->kids.size(); ++i) {
         Node *k = n->kids[i].get();
         if (!k->e.isDir) continue;
         auto it = counts.find(k->e.name);
         if (it == counts.end() || k->e.size == *it) continue;
         k->e.size = *it;
-        QModelIndex ix = createIndex(int(i), Size, k);
-        emit dataChanged(ix, ix, {Qt::DisplayRole, SortRole});
+        if (first < 0) first = int(i);
+        last = int(i);
     }
+    if (first >= 0)
+        emit dataChanged(createIndex(first, Size, n->kids[first].get()), createIndex(last, Size, n->kids[last].get()), {Qt::DisplayRole, SortRole});
+}
+
+void FsModel::deliverMimes(const QString &path, quint64 gen, QHash<QString, QString> mimes)
+{
+    if (gen != m_gen) return;
+    Node *n = m_byPath.value(path);
+    if (!n) return;
+    int first = -1, last = -1;
+    for (size_t i = 0; i < n->kids.size(); ++i) {
+        Node *k = n->kids[i].get();
+        if (k->e.isDir) continue;
+        auto it = mimes.find(k->e.name);
+        if (it == mimes.end() || k->e.mime == *it) continue;
+        k->e.mime = *it;
+        if (first < 0) first = int(i);
+        last = int(i);
+    }
+    if (first < 0) return;
+    Node *a = n->kids[first].get(), *b = n->kids[last].get();
+    emit dataChanged(createIndex(first, Name, a), createIndex(last, Name, b), {Qt::DecorationRole, MimeRole});
+    emit dataChanged(createIndex(first, Type, a), createIndex(last, Type, b), {Qt::DisplayRole, SortRole});
 }
 
 void FsModel::merge(Node *n, std::vector<FileEntry> &entries)
@@ -459,12 +651,15 @@ void FsModel::merge(Node *n, std::vector<FileEntry> &entries)
     QHash<QString, int> fresh;
     for (int i = 0; i < int(entries.size()); ++i) fresh.insert(entries[i].name, i);
     QModelIndex parent = indexOf(n);
-    // removals, from the end so row numbers stay valid
+    // removals, from the end so row numbers stay valid, in contiguous runs
     for (int r = int(n->kids.size()) - 1; r >= 0; --r) {
         if (fresh.contains(n->kids[r]->e.name)) continue;
-        beginRemoveRows(parent, r, r);
-        unindexNode(n->kids[r].get());
-        n->kids.erase(n->kids.begin() + r);
+        const int last = r;
+        while (r > 0 && !fresh.contains(n->kids[r - 1]->e.name)) --r;
+        beginRemoveRows(parent, r, last);
+        for (int i = r; i <= last; ++i) unindexNode(n->kids[i].get());
+        n->kids.erase(n->kids.begin() + r, n->kids.begin() + last + 1);
+        renumber(n, r);
         endRemoveRows();
     }
     QSet<QString> have;
@@ -475,7 +670,11 @@ void FsModel::merge(Node *n, std::vector<FileEntry> &entries)
         if (k->e.isDir && ne.isDir && k->e.size >= 0) ne.size = k->e.size;   // keep the item count
         if (ne.mtime != k->e.mtime || ne.size != k->e.size || ne.mode != k->e.mode || ne.isDir != k->e.isDir) {
             const bool wasDir = k->e.isDir;
+            const QString mime = k->e.mime;
             k->e = ne;
+            k->dateGen = 0;
+            // a provisional type for a file without extension: keep the sniffed one
+            if (!ne.isDir && ne.mime == QLatin1String("application/octet-stream") && !ne.name.contains('.')) k->e.mime = mime;
             if (wasDir && !ne.isDir && !k->kids.empty()) {
                 beginRemoveRows(createIndex(r, 0, k), 0, int(k->kids.size()) - 1);
                 for (auto &c : k->kids) unindexNode(c.get());
@@ -496,6 +695,7 @@ void FsModel::merge(Node *n, std::vector<FileEntry> &entries)
             auto k = std::make_unique<Node>();
             k->e = std::move(*e);
             k->parent = n;
+            k->rowHint = int(n->kids.size());
             Node *raw = k.get();
             n->kids.push_back(std::move(k));
             indexNode(raw);
@@ -606,6 +806,7 @@ void FsModel::searchWorker(QPointer<FsModel> self, std::shared_ptr<std::atomic<b
                     k->e = std::move(p.second);
                     k->fullPath = p.first;
                     k->parent = r;
+                    k->rowHint = int(r->kids.size());
                     self->m_byPath.insert(p.first, k.get());
                     r->kids.push_back(std::move(k));
                 }
@@ -676,7 +877,8 @@ void FsModel::startSearch(const QString &pattern)
 {
     stopSearch();
     beginResetModel();
-    if (!m_watcher.directories().isEmpty()) m_watcher.removePaths(m_watcher.directories());
+    if (!m_watched.isEmpty()) m_watcher.removePaths(QStringList(m_watched.begin(), m_watched.end()));
+    m_watched.clear();
     m_byPath.clear();
     m_root = std::make_unique<Node>();
     m_root->fullPath = m_rootPath;
@@ -769,7 +971,12 @@ QVariant FsModel::data(const QModelIndex &idx, int role) const
                 return rel;
             }
             return mimeComment(e.mime);
-        case Modified: return formatDate(e.mtime);
+        case Modified:
+            if (n->dateGen != g_formatGen) {
+                n->dateText = formatDate(e.mtime);
+                n->dateGen = g_formatGen;
+            }
+            return n->dateText;
         case Permissions: return permString(e.mode, e.isDir, e.isLink);
         case Owner: return userName(e.uid);
         }
@@ -800,12 +1007,8 @@ QVariant FsModel::data(const QModelIndex &idx, int role) const
         if (e.hidden || idx.column() != Name) return Theme::get().fgDim;
         break;
     case Qt::FontRole:
-        if (idx.column() == Permissions) return QFont(Theme::get().mono);
-        if (e.isLink && idx.column() == Name) {
-            QFont f;
-            f.setItalic(true);
-            return f;
-        }
+        if (idx.column() == Permissions) return m_monoFont;
+        if (e.isLink && idx.column() == Name) return m_italicFont;
         break;
     case PathRole: return pathOf(n);
     case IsDirRole: return e.isDir;
@@ -848,6 +1051,7 @@ bool FsModel::setData(const QModelIndex &idx, const QVariant &value, int role)
     }
     unindexNode(n);
     n->e.name = newName;
+    n->key.reset();
     n->e.hidden = newName.startsWith('.');
     if (!n->fullPath.isEmpty()) n->fullPath = newPath;
     if (!n->e.isDir) {
@@ -932,37 +1136,63 @@ void SortProxy::reapply()
 
 bool SortProxy::filterAcceptsRow(int row, const QModelIndex &parent) const
 {
-    QModelIndex ix = sourceModel()->index(row, 0, parent);
-    if (!Settings::get().showHidden && ix.data(FsModel::HiddenRole).toBool()) return false;
-    if (!m_filter.isEmpty() && !parent.isValid()) {
-        const QString name = ix.data(Qt::DisplayRole).toString();
-        if (!name.contains(m_filter, Qt::CaseInsensitive)) return false;
-    }
+    const auto *m = static_cast<const FsModel *>(sourceModel());
+    const FileEntry *e = m->entry(m->index(row, 0, parent));
+    if (!e) return false;
+    if (!Settings::get().showHidden && e->hidden) return false;
+    if (!m_filter.isEmpty() && !parent.isValid() && !e->name.contains(m_filter, Qt::CaseInsensitive)) return false;
     return true;
+}
+
+namespace {
+// Sort keys for the Type and Owner columns, one per distinct value.
+template <typename Text>
+const QCollatorSortKey &keyFor(std::unordered_map<QString, QCollatorSortKey> &cache, const QString &k, Text text)
+{
+    auto it = cache.find(k);
+    if (it == cache.end()) it = cache.emplace(k, FsModel::collator().sortKey(text(k))).first;
+    return it->second;
+}
 }
 
 bool SortProxy::lessThan(const QModelIndex &a, const QModelIndex &b) const
 {
-    static QCollator coll = [] {
-        QCollator c(QLocale(QLocale::Spanish, QLocale::Spain));
-        c.setNumericMode(true);
-        c.setCaseSensitivity(Qt::CaseInsensitive);
-        c.setIgnorePunctuation(false);
-        return c;
-    }();
+    // Straight to the entries: no QVariant round trips, and names compare by
+    // precomputed collation keys (a memcmp) instead of a full ICU compare.
+    const auto *m = static_cast<const FsModel *>(sourceModel());
+    const FileEntry *ea = m->entry(a), *eb = m->entry(b);
     const bool desc = sortOrder() == Qt::DescendingOrder;
-    if (Settings::get().foldersFirst) {
-        bool da = a.data(FsModel::IsDirRole).toBool(), db = b.data(FsModel::IsDirRole).toBool();
-        if (da != db) return desc ? !da : da;   // folders stay on top in both orders
+    if (Settings::get().foldersFirst && ea->isDir != eb->isDir) return desc ? !ea->isDir : ea->isDir;   // folders stay on top in both orders
+    switch (a.column()) {
+    case FsModel::Size:
+        if (ea->size != eb->size) return ea->size < eb->size;
+        break;
+    case FsModel::Modified:
+        if (ea->mtime != eb->mtime) return ea->mtime < eb->mtime;
+        break;
+    case FsModel::Permissions:
+        if ((ea->mode & 07777) != (eb->mode & 07777)) return (ea->mode & 07777) < (eb->mode & 07777);
+        break;
+    case FsModel::Type:
+        if (m->searching()) {
+            const int c = FsModel::collator().compare(a.data(FsModel::SortRole).toString(), b.data(FsModel::SortRole).toString());
+            if (c != 0) return c < 0;
+        } else if (ea->mime != eb->mime) {
+            static std::unordered_map<QString, QCollatorSortKey> types;
+            const int c = keyFor(types, ea->mime, FsModel::mimeComment).compare(keyFor(types, eb->mime, FsModel::mimeComment));
+            if (c != 0) return c < 0;
+        }
+        break;
+    case FsModel::Owner:
+        if (ea->uid != eb->uid) {
+            static std::unordered_map<QString, QCollatorSortKey> owners;
+            auto same = [](const QString &x) { return x; };
+            const int c = keyFor(owners, FsModel::userName(ea->uid), same).compare(keyFor(owners, FsModel::userName(eb->uid), same));
+            if (c != 0) return c < 0;
+        }
+        break;
+    default:
+        break;
     }
-    QVariant va = a.data(FsModel::SortRole), vb = b.data(FsModel::SortRole);
-    if (a.column() == FsModel::Size || a.column() == FsModel::Modified || a.column() == FsModel::Permissions) {
-        qint64 x = va.toLongLong(), y = vb.toLongLong();
-        if (x != y) return x < y;
-    } else {
-        int c = coll.compare(va.toString(), vb.toString());
-        if (c != 0) return c < 0;
-    }
-    return coll.compare(a.sibling(a.row(), 0).data(FsModel::SortRole).toString(),
-                        b.sibling(b.row(), 0).data(FsModel::SortRole).toString()) < 0;
+    return m->nameKey(a).compare(m->nameKey(b)) < 0;
 }

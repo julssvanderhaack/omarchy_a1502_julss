@@ -38,7 +38,11 @@ Remote &Remote::get()
 
 QString Remote::gvfsRoot() { return QString("/run/user/%1/gvfs").arg(getuid()); }
 
-bool Remote::isRemotePath(const QString &path) { return path.startsWith(gvfsRoot() + '/'); }
+bool Remote::isRemotePath(const QString &path)
+{
+    static const QString prefix = gvfsRoot() + '/';   // asked for every painted item
+    return path.startsWith(prefix);
+}
 
 // "sftp:host=example.org,user=julio,port=2222" -> "julio@example.org (SSH)"
 QString Remote::describe(const QString &dir, QString *scheme, QString *uri)

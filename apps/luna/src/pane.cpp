@@ -33,6 +33,7 @@
 #include <QStyledItemDelegate>
 #include <QTextLayout>
 #include <QStorageInfo>
+#include <QThreadPool>
 #include <QTimer>
 #include <QToolButton>
 #include <QTreeView>
@@ -48,6 +49,29 @@ public:
     using QStyledItemDelegate::QStyledItemDelegate;
     int iconSize = 64;
     QSize grid;
+    struct Wrapped {
+        QStringList lines;
+        int width = 0;   // widest line
+    };
+    // Laying out text is the costly part, and the view asks for every item's
+    // size on each relayout: remember the result per name.
+    const Wrapped &wrapped(const QString &name, const QFont &font, int tw) const
+    {
+        if (tw != m_cacheWidth || font != m_cacheFont || m_cache.size() > 50000) {
+            m_cache.clear();
+            m_cacheWidth = tw;
+            m_cacheFont = font;
+        }
+        auto it = m_cache.find(name);
+        if (it == m_cache.end()) {
+            Wrapped w;
+            w.lines = wrapLines(name, font, tw);
+            QFontMetrics fm(font);
+            for (const QString &l : w.lines) w.width = std::max(w.width, fm.horizontalAdvance(l));
+            it = m_cache.insert(name, w);
+        }
+        return *it;
+    }
     // The item is only as big as what is drawn, so the gaps between icons
     // count as empty space (background menu, rubber-band selection).
     static QStringList wrapLines(const QString &name, const QFont &font, int tw)
@@ -74,12 +98,9 @@ public:
     }
     QSize sizeHint(const QStyleOptionViewItem &o, const QModelIndex &i) const override
     {
-        const int tw = grid.width() - 14;
-        const QStringList lines = wrapLines(i.data(Qt::DisplayRole).toString(), o.font, tw);
-        QFontMetrics fm(o.font);
-        int w = iconSize;
-        for (const QString &l : lines) w = std::max(w, fm.horizontalAdvance(l));
-        return QSize(std::min(w + 14, grid.width() - 6), iconSize + 14 + int(lines.size()) * fm.height());
+        const Wrapped &wr = wrapped(i.data(Qt::DisplayRole).toString(), o.font, grid.width() - 14);
+        const int w = std::max(iconSize, wr.width);
+        return QSize(std::min(w + 14, grid.width() - 6), iconSize + 14 + int(wr.lines.size()) * QFontMetrics(o.font).height());
     }
     QRect textRect(const QRect &r) const { return QRect(r.left() + 4, r.top() + iconSize + 10, r.width() - 8, r.height() - iconSize - 12); }
     void paint(QPainter *p, const QStyleOptionViewItem &o, const QModelIndex &i) const override
@@ -91,7 +112,7 @@ public:
         const bool sel = o.state & QStyle::State_Selected, hover = o.state & QStyle::State_MouseOver;
         QFontMetrics fm(o.font);
         const int tw = r.width() - 8;
-        const QStringList lines = wrapLines(i.data(Qt::DisplayRole).toString(), o.font, std::max(tw, grid.width() - 14));
+        const QStringList lines = wrapped(i.data(Qt::DisplayRole).toString(), o.font, std::max(tw, grid.width() - 14)).lines;
         const int textH = lines.size() * fm.height();
         QRect bg(r.left(), r.top(), r.width(), iconSize + 14 + textH);
         if (sel || hover) {
@@ -126,6 +147,11 @@ public:
     {
         editor->setGeometry(textRect(o.rect).adjusted(-2, -2, 2, 0).intersected(o.rect.adjusted(0, 0, 0, 20)));
     }
+
+private:
+    mutable QHash<QString, Wrapped> m_cache;
+    mutable int m_cacheWidth = -1;
+    mutable QFont m_cacheFont;
 };
 } // namespace
 
@@ -381,13 +407,22 @@ QStringList Pane::pathsFor(const QModelIndexList &rows) const
 // icon views select a single cell, not the whole six-column row.
 QModelIndexList Pane::selectedItems() const
 {
+    // Straight from the selection ranges: selectedIndexes() would expand a
+    // select-all into one index per cell, and persistent indexes are costly.
     QModelIndexList out;
-    QSet<QPersistentModelIndex> seen;
-    for (const QModelIndex &i : m_selection->selectedIndexes()) {
-        QModelIndex first = i.sibling(i.row(), 0);
-        if (seen.contains(first)) continue;
-        seen.insert(first);
-        out << first;
+    const QItemSelection selection = m_selection->selection();
+    const bool overlap = selection.size() > 1;   // ranges may share rows
+    QSet<std::pair<quintptr, int>> seen;        // (parent, row)
+    for (const QItemSelectionRange &r : selection) {
+        const QModelIndex parent = r.parent();
+        const quintptr pid = parent.isValid() ? quintptr(parent.internalPointer()) + 1 : 0;
+        for (int row = r.top(); row <= r.bottom(); ++row) {
+            if (overlap) {
+                if (seen.contains({pid, row})) continue;
+                seen.insert({pid, row});
+            }
+            out << m_proxy->index(row, 0, parent);
+        }
     }
     return out;
 }
@@ -406,13 +441,19 @@ void Pane::setActive(bool a)
 void Pane::applySettings()
 {
     const Settings &s = Settings::get();
-    m_proxy->sort(s.sortColumn, s.sortDescending ? Qt::DescendingOrder : Qt::AscendingOrder);
-    for (QTreeView *t : {m_list, m_details, m_tree}) {
-        t->header()->blockSignals(true);
-        t->header()->setSortIndicator(s.sortColumn, s.sortDescending ? Qt::DescendingOrder : Qt::AscendingOrder);
-        t->header()->blockSignals(false);
+    // Re-sorting a big folder is the expensive part: only when it matters
+    // (zooming, for instance, also lands here).
+    const QList<int> sortKey = {s.sortColumn, s.sortDescending, s.foldersFirst, s.showHidden};
+    if (sortKey != m_sortKey) {
+        m_sortKey = sortKey;
+        m_proxy->sort(s.sortColumn, s.sortDescending ? Qt::DescendingOrder : Qt::AscendingOrder);
+        for (QTreeView *t : {m_list, m_details, m_tree}) {
+            t->header()->blockSignals(true);
+            t->header()->setSortIndicator(s.sortColumn, s.sortDescending ? Qt::DescendingOrder : Qt::AscendingOrder);
+            t->header()->blockSignals(false);
+        }
+        m_proxy->reapply();
     }
-    m_proxy->reapply();
     applyIconSizes();
     for (QAbstractItemView *v : findChildren<QAbstractItemView *>()) v->viewport()->update();
     updateStatus();
@@ -511,8 +552,18 @@ void Pane::setPath(const QString &path0, bool record, const QStringList &select)
     m_pendingSelect = sel;
     m_pendingEdit = false;
     m_columns->setRootIndex({});
-    QStorageInfo si(path);
-    m_freeBytes = si.isValid() ? si.bytesAvailable() : -1;
+    // Free space comes from statvfs, which can stall on a dead network mount.
+    m_freeBytes = -1;
+    QPointer<Pane> self(this);
+    QThreadPool::globalInstance()->start([self, path] {
+        QStorageInfo si(path);
+        const qint64 free = si.isValid() ? si.bytesAvailable() : -1;
+        QMetaObject::invokeMethod(qApp, [self, path, free] {
+            if (!self || self->m_path != path) return;
+            self->m_freeBytes = free;
+            self->updateStatus();
+        }, Qt::QueuedConnection);
+    });
     emit pathChanged(path);
     emit historyChanged();
     updateStatus();
@@ -1042,7 +1093,7 @@ void Pane::closeFilter()
 void Pane::updateStatus()
 {
     const int total = m_proxy->rowCount();
-    QStringList sel = selectedPaths();
+    const QModelIndexList sel = m_model->isLoading() ? QModelIndexList() : selectedItems();
     QString s;
     if (m_model->isLoading()) {
         s = QString::fromUtf8("Cargando…");
@@ -1050,14 +1101,14 @@ void Pane::updateStatus()
         s = total == 1 ? QString::fromUtf8("1 elemento") : QString::fromUtf8("%1 elementos").arg(total);
     } else {
         qint64 bytes = 0;
-        int folders = 0;
-        for (const QModelIndex &ix : selectedItems()) {
+        const FileEntry *one = nullptr;
+        for (const QModelIndex &ix : sel) {
             const FileEntry *e = m_model->entry(sourceIndex(ix));
             if (!e) continue;
-            if (e->isDir) ++folders;
-            else bytes += e->size;
+            one = e;
+            if (!e->isDir) bytes += e->size;
         }
-        if (sel.size() == 1) s = QString::fromUtf8("«%1» seleccionado").arg(QFileInfo(sel[0]).fileName());
+        if (sel.size() == 1 && one) s = QString::fromUtf8("«%1» seleccionado").arg(one->name);
         else s = QString::fromUtf8("%1 de %2 seleccionados").arg(sel.size()).arg(total);
         if (bytes > 0) s += " (" + FsModel::formatSize(bytes) + ")";
     }
@@ -1243,14 +1294,15 @@ bool Pane::eventFilter(QObject *o, QEvent *e)
         focusView();
     }
 
+    // Mouse moves and paints of every viewport pass through here: find the
+    // view by parent instead of searching all children.
     auto *v = qobject_cast<QAbstractItemView *>(o);
     QWidget *vp = nullptr;
     if (!v)
-        for (QAbstractItemView *x : findChildren<QAbstractItemView *>())
-            if (x->viewport() == o) {
-                v = x;
-                vp = x->viewport();
-            }
+        if (auto *x = qobject_cast<QAbstractItemView *>(o->parent()); x && x->viewport() == o) {
+            v = x;
+            vp = x->viewport();
+        }
     if (!v) return QFrame::eventFilter(o, e);
 
     switch (e->type()) {

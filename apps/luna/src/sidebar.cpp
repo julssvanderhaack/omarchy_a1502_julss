@@ -185,6 +185,7 @@ void Sidebar::reload()
 {
     const Settings &s = Settings::get();
     clear();
+    ++m_gen;
     m_places = m_bookmarks = m_devices = nullptr;
     auto item = [&](QTreeWidgetItem *parent, const QString &name, const QString &path, const QIcon &icon, int kind) {
         auto *it = new QTreeWidgetItem(parent, {name});
@@ -248,7 +249,7 @@ void Sidebar::reload()
 
 void Sidebar::loadDevices()
 {
-    auto addDev = [&](const QString &name, const QString &path, const QString &dev, bool removable, double usage, const QString &tip) {
+    auto addDev = [this](const QString &name, const QString &path, const QString &dev, bool removable, double usage, const QString &tip) {
         auto *it = new QTreeWidgetItem(m_devices, {name});
         it->setIcon(0, Icons::get().sidebar(removable ? "usb" : "drive"));
         it->setData(0, PathRole, path);
@@ -277,25 +278,32 @@ void Sidebar::loadDevices()
         if (name.isEmpty() || name == mp) name = QFileInfo(mp).fileName();
         addDev(name, mp, dev, true, usageOf(si), freeText(si) + "\n" + dev);
     }
-    // Plugged-in but unmounted partitions (lsblk is quick; run synchronously).
-    QProcess p;
-    p.start("lsblk", {"-J", "-b", "-o", "PATH,LABEL,SIZE,MOUNTPOINT,FSTYPE,HOTPLUG,RM,TYPE"});
-    if (!p.waitForFinished(1500)) return;
-    std::function<void(const QJsonArray &)> walk = [&](const QJsonArray &arr) {
-        for (const auto &v : arr) {
-            QJsonObject o = v.toObject();
-            walk(o["children"].toArray());
-            const bool hot = o["hotplug"].toBool() || o["rm"].toBool();
-            const QString dev = o["path"].toString();
-            if (!hot || o["fstype"].toString().isEmpty() || !o["mountpoint"].isNull() || mountedDevs.contains(dev)) continue;
-            if (o["type"].toString() != "part" && o["type"].toString() != "disk") continue;
-            QString label = o["label"].toString();
-            double gb = o["size"].toDouble() / 1e9;
-            if (label.isEmpty()) label = QString::fromUtf8("Volumen de %1 GB").arg(gb, 0, 'f', 1);
-            addDev(label, {}, dev, true, -1, QString::fromUtf8("%1 · sin montar (clic para montar)").arg(dev));
-        }
-    };
-    walk(QJsonDocument::fromJson(p.readAllStandardOutput()).object()["blockdevices"].toArray());
+    // Plugged-in but unmounted partitions. lsblk runs in the background so
+    // building the sidebar (startup, every mount) never waits for it.
+    auto *p = new QProcess(this);
+    const quint64 gen = m_gen;
+    connect(p, &QProcess::errorOccurred, p, &QObject::deleteLater);
+    connect(p, &QProcess::finished, this, [this, p, gen, mountedDevs, addDev] {
+        p->deleteLater();
+        if (gen != m_gen || !m_devices) return;   // rebuilt meanwhile
+        std::function<void(const QJsonArray &)> walk = [&](const QJsonArray &arr) {
+            for (const auto &v : arr) {
+                QJsonObject o = v.toObject();
+                walk(o["children"].toArray());
+                const bool hot = o["hotplug"].toBool() || o["rm"].toBool();
+                const QString dev = o["path"].toString();
+                if (!hot || o["fstype"].toString().isEmpty() || !o["mountpoint"].isNull() || mountedDevs.contains(dev)) continue;
+                if (o["type"].toString() != "part" && o["type"].toString() != "disk") continue;
+                QString label = o["label"].toString();
+                double gb = o["size"].toDouble() / 1e9;
+                if (label.isEmpty()) label = QString::fromUtf8("Volumen de %1 GB").arg(gb, 0, 'f', 1);
+                addDev(label, {}, dev, true, -1, QString::fromUtf8("%1 · sin montar (clic para montar)").arg(dev));
+            }
+        };
+        walk(QJsonDocument::fromJson(p->readAllStandardOutput()).object()["blockdevices"].toArray());
+    });
+    QTimer::singleShot(3000, p, [p] { p->kill(); });
+    p->start("lsblk", {"-J", "-b", "-o", "PATH,LABEL,SIZE,MOUNTPOINT,FSTYPE,HOTPLUG,RM,TYPE"});
 }
 
 void Sidebar::setCurrentPath(const QString &path)

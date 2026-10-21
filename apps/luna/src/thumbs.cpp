@@ -244,6 +244,10 @@ void Thumbs::deliver(const QString &path, qint64 mtime, const QImage &img, bool 
     }
     m_pending.remove(key);
     m_preview.remove(key);
+    {
+        QMutexLocker l(&wantedMutex);   // done with it: keep the map small
+        wanted.remove(key);
+    }
     if (img.isNull()) {
         m_failed.insert(key);
         return;

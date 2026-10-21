@@ -120,5 +120,6 @@ private:
     QStringList m_pendingSelect;
     bool m_pendingEdit = false;
     qint64 m_freeBytes = -1;
+    QList<int> m_sortKey;   // sort/filter settings last applied to the proxy
     QPointer<Pane> m_other;
 };
