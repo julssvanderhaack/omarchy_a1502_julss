@@ -109,6 +109,19 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
     f->addRow("", note(QString::fromUtf8("«Seguir al sistema» usa el tema que pone Omarchy al cambiar de tema (gsettings). "
                                          "Los colores de la ventana salen siempre del tema activo de Omarchy.")));
 
+    // ---- Barra superior
+    f = page("Barra superior", "menu");
+    f->addRow("Estilo:", combo({"Solo iconos", "Iconos y texto", "Iconos juntos (agrupados)"}, s.toolbarStyle));
+    f->addRow(QString::fromUtf8("Tamaño de los iconos:"), combo({QString::fromUtf8("Pequeños"), "Medianos", "Grandes"}, s.toolbarIconSize));
+    f->addRow("Botones:", check("Adelante", s.tbForward));
+    f->addRow("", check("Carpeta superior", s.tbUp));
+    f->addRow("", check("Buscar", s.tbSearch));
+    f->addRow("", check("Modo de vista", s.tbView));
+    f->addRow("", check("Vista dividida", s.tbSplit));
+    f->addRow("", check("Barra lateral", s.tbSidebar));
+    f->addRow("", note(QString::fromUtf8("También con clic derecho sobre la barra. En ventanas estrechas el texto se oculta solo "
+                                         "y la barra lateral se aparta (F9 la muestra igualmente).")));
+
     // ---- Barra lateral
     f = page("Barra lateral", "sidebar");
     auto *side = new QComboBox;

@@ -66,6 +66,21 @@ void runDemo(QMainWindow *w, const QString &dir)
         button(w, QString::fromUtf8("Calcular"))->click();
     });
     steps->push_back([=] { shot("6-calculo-integral"); });
+    auto calcOp = [=](int op, const char *f, const char *g) {
+        tabs->currentWidget()->findChild<QComboBox *>()->setCurrentIndex(op);
+        for (auto *e : tabs->currentWidget()->findChildren<QLineEdit *>()) {
+            if (e->placeholderText().startsWith("p. ej.")) e->setText(QString::fromUtf8(f));
+            else if (e->isVisible() && (e->placeholderText().startsWith("x^2 - x") || e->placeholderText().startsWith("x −")))
+                e->setText(QString::fromUtf8(g));
+        }
+        button(w, QString::fromUtf8("Calcular"))->click();
+    };
+    steps->push_back([=] { calcOp(8, "x^4 - 3x^2 + 2x - 5", "x^2 - x + 1"); });
+    steps->push_back([=] { shot("6b-division-polinomios"); });
+    steps->push_back([=] { calcOp(9, "2x^3 - 5x^2 + 4", "x - 2"); });
+    steps->push_back([=] { shot("6c-ruffini"); });
+    steps->push_back([=] { calcOp(9, "x^4 - x^3 - 7x^2 + x + 6", ""); });
+    steps->push_back([=] { shot("6d-ruffini-factorizar"); });
     steps->push_back([=] {
         tabs->setCurrentIndex(3);
         button(w, QString::fromUtf8("Dibujar"))->click();

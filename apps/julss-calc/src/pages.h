@@ -127,7 +127,7 @@ private:
     FormulaView *m_preview;
     QComboBox *m_op;
     QFormLayout *m_form;
-    QLineEdit *m_var, *m_a, *m_b, *m_var2, *m_c, *m_d, *m_point;
+    QLineEdit *m_g, *m_var, *m_a, *m_b, *m_var2, *m_c, *m_d, *m_point;
     QSpinBox *m_order;
     QComboBox *m_dir;
     ResultList *m_results;

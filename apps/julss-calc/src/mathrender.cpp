@@ -265,28 +265,77 @@ BoxP matrixBox(const MNode &n, const Style &st)
         ra[r] = std::max(ra[r], std::max(cells[i]->a, px * 0.6));
         rd[r] = std::max(rd[r], std::max(cells[i]->d, px * 0.2));
     }
-    const double cg = px * 0.8, rg = px * 0.25;
+    // "ruffini": synthetic division table (root column, rule above the last
+    // row, boxed remainder). "longdiv:r,r…": long division with the divisor
+    // and quotient in the last column and a rule above each listed row.
+    // Both right align cells like hand-written sums.
+    const bool ruffini = n.text == "ruffini";
+    const bool longdiv = n.text.startsWith("longdiv");
+    const bool right = ruffini || longdiv;
+    const double cg = px * (ruffini ? 1.1 : longdiv ? 0.5 : 0.8), rg = px * (right ? 0.55 : 0.25);
     double H = 0;
     for (int r = 0; r < rows; ++r) H += ra[r] + rd[r] + (r ? rg : 0);
     const double axis = axisOf(px);
     double y = -axis - H / 2;
+    const double top = y;
     auto b = std::make_shared<Box>();
+    std::vector<double> rowTop(rows), rowBottom(rows), colLeft(cols);
     for (int r = 0; r < rows; ++r) {
         if (r) y += rg;
+        rowTop[r] = y;
         y += ra[r];
         double x = 0;
         for (int c = 0; c < cols; ++c) {
+            colLeft[c] = x;
             int i = r * cols + c;
-            if (i < int(cells.size())) b->kids.push_back({QPointF(x + (cw[c] - cells[i]->w) / 2, y), cells[i]});
+            if (i < int(cells.size()))
+                b->kids.push_back({QPointF(x + (longdiv && c == cols - 1 ? 0 : right ? cw[c] - cells[i]->w : (cw[c] - cells[i]->w) / 2), y), cells[i]});
             x += cw[c] + cg;
         }
         y += rd[r];
+        rowBottom[r] = y;
     }
     double w = -cg;
     for (double c : cw) w += c + cg;
+    if (ruffini && cols > 2 && rows >= 3) {
+        const double t = std::max(1.0, px * 0.055), pad = cg / 2;
+        QPainterPath p;
+        const double vx = colLeft[1] - pad;
+        p.moveTo(vx, top - rg / 3);
+        p.lineTo(vx, rowBottom[rows - 2] + rg / 2);
+        p.moveTo(vx - cw[0] - pad, rowBottom[rows - 2] + rg / 2);
+        p.lineTo(w + pad / 2, rowBottom[rows - 2] + rg / 2);
+        const double rx = colLeft[cols - 1] - pad;   // remainder box
+        p.moveTo(rx, rowBottom[rows - 2] + rg / 2);
+        p.lineTo(rx, rowBottom[rows - 1] + rg / 3);
+        p.lineTo(w + pad / 2, rowBottom[rows - 1] + rg / 3);
+        b->strokes.push_back({p, t, false});
+        w += pad / 2;
+    }
+    if (longdiv && cols > 1 && rows >= 2) {
+        const double t = std::max(1.0, px * 0.055), pad = px * 0.5;
+        QPainterPath p;
+        const double vx = colLeft[cols - 1] - pad / 2, hy = rowBottom[0] + rg / 2;
+        p.moveTo(vx, top - rg / 3);   // the box around the divisor
+        p.lineTo(vx, hy);
+        p.lineTo(w + pad / 2, hy);
+        for (const QString &part : n.text.section(':', 1).split(',', Qt::SkipEmptyParts)) {
+            const int r = part.toInt();
+            if (r < 1 || r >= rows) continue;
+            int c0 = cols, c1 = -1;   // under the terms of the subtraction above
+            for (int c = 0; c < cols - 1; ++c)
+                if (cells[(r - 1) * cols + c]->w > 0) c0 = std::min(c0, c), c1 = c;
+            if (c1 < 0) continue;
+            const double ly = rowBottom[r - 1] + rg / 2;
+            p.moveTo(colLeft[c0] - cg / 2, ly);
+            p.lineTo(colLeft[c1] + cw[c1] + cg / 4, ly);
+        }
+        b->strokes.push_back({p, t, false});
+        w += pad / 2;
+    }
     b->w = w;
-    b->a = axis + H / 2;
-    b->d = H / 2 - axis;
+    b->a = -top;
+    b->d = y + (right ? rg / 3 + 1 : 0);
     return b;
 }
 

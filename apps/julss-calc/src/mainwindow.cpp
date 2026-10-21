@@ -15,7 +15,9 @@
 
 static QString statePath()
 {
-    QString dir = QDir::homePath() + "/.local/state/julss-calc";
+    // screenshot runs get a throwaway state so the demo never touches the real one
+    QString dir = qEnvironmentVariableIsSet("JULSS_CALC_SHOTS") ? qEnvironmentVariable("JULSS_CALC_SHOTS") + "/state"
+                                                                : QDir::homePath() + "/.local/state/julss-calc";
     QDir().mkpath(dir);
     return dir + "/state.json";
 }

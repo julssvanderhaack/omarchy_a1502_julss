@@ -16,6 +16,9 @@
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QDateTime>
+#include <QContextMenuEvent>
+#include <QCursor>
+#include <QFrame>
 #include <QDir>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -110,9 +113,13 @@ MainWindow::MainWindow(const QStringList &paths)
     connect(m_back, &QToolButton::clicked, this, [this] { pane()->back(); });
     connect(m_forward, &QToolButton::clicked, this, [this] { pane()->forward(); });
     connect(m_up, &QToolButton::clicked, this, [this] { pane()->up(); });
-    header->addWidget(m_back);
-    header->addWidget(m_forward);
-    header->addWidget(m_up);
+    m_navGroup = new QFrame;
+    auto *navLayout = new QHBoxLayout(m_navGroup);
+    navLayout->setContentsMargins(0, 0, 0, 0);
+    navLayout->addWidget(m_back);
+    navLayout->addWidget(m_forward);
+    navLayout->addWidget(m_up);
+    header->addWidget(m_navGroup);
     m_pathbar = new PathBar;
     connect(m_pathbar, &PathBar::navigate, this, [this](const QString &p) {
         pane()->setPath(p);
@@ -123,12 +130,15 @@ MainWindow::MainWindow(const QStringList &paths)
     header->addSpacing(4);
     header->addWidget(m_pathbar, 1);
     header->addSpacing(6);
-    auto *search = toolButton("search", "Buscar (Ctrl+F)");
-    connect(search, &QToolButton::clicked, this, [this] {
+    m_actionGroup = new QFrame;
+    auto *actLayout = new QHBoxLayout(m_actionGroup);
+    actLayout->setContentsMargins(0, 0, 0, 0);
+    m_search = toolButton("search", "Buscar (Ctrl+F)");
+    connect(m_search, &QToolButton::clicked, this, [this] {
         if (pane()->filterVisible()) pane()->closeFilter();
         else pane()->showFilter();
     });
-    header->addWidget(search);
+    actLayout->addWidget(m_search);
 
     // View mode: one dropdown with names
     m_viewBtn = new QToolButton;
@@ -167,23 +177,28 @@ MainWindow::MainWindow(const QStringList &paths)
     hid->setCheckable(true);
     connect(viewMenu, &QMenu::aboutToShow, hid, [hid] { hid->setChecked(Settings::get().showHidden); });
     m_viewBtn->setMenu(viewMenu);
-    header->addWidget(m_viewBtn);
-    header->addSpacing(4);
+    actLayout->addWidget(m_viewBtn);
     m_split = toolButton("split", "Vista dividida (F3)");
     m_split->setCheckable(true);
     connect(m_split, &QToolButton::clicked, this, [this](bool on) {
         page()->setSplit(on);
         syncHeader();
     });
-    header->addWidget(m_split);
+    actLayout->addWidget(m_split);
     m_sideBtn = toolButton("sidebar", "Barra lateral (F9)");
     m_sideBtn->setCheckable(true);
-    connect(m_sideBtn, &QToolButton::clicked, this, [](bool on) {
+    connect(m_sideBtn, &QToolButton::clicked, this, [this](bool on) {
+        if (narrow()) {   // narrow window: show/hide just for now
+            m_sidebarForced = on;
+            layoutSidebar();
+            return;
+        }
         Settings::get().sidebarVisible = on;
         Settings::get().changed();
     });
-    header->addWidget(m_sideBtn);
+    actLayout->addWidget(m_sideBtn);
     auto *menuBtn = toolButton("menu", "Menú");
+    m_menuBtn = menuBtn;
     menuBtn->setPopupMode(QToolButton::InstantPopup);
     auto *menu = new QMenu(menuBtn);
     menu->addAction(Icons::get().ui("newtab"), "Ventana nueva", QKeySequence("Ctrl+N"), this, [] { (new MainWindow({QDir::homePath()}))->show(); });
@@ -199,6 +214,7 @@ MainWindow::MainWindow(const QStringList &paths)
     menu->addAction(Icons::get().ui("trash"), "Ir a la papelera", this, [this] { pane()->setPath(FileOps::trashFiles()); });
     menu->addAction(Icons::get().ui("network"), QString::fromUtf8("Conectar a un servidor…"), this, [this] { connectServer({}); });
     menu->addSeparator();
+    menu->addAction(Icons::get().ui("icons"), "Barra superior…", this, [this] { headerMenu(QCursor::pos()); });
     menu->addAction(Icons::get().ui("settings"), "Ajustes", QKeySequence("Ctrl+,"), this, [this] { SettingsDialog(this).exec(); });
     menu->addAction(Icons::get().ui("info"), "Atajos de teclado", this, &MainWindow::showShortcuts);
     menu->addAction(Icons::get().ui("star"), "Acerca de Luna", this, &MainWindow::showAbout);
@@ -214,7 +230,10 @@ MainWindow::MainWindow(const QStringList &paths)
     };
     labelsOnly(menu);
     labelsOnly(m_viewBtn->menu());
-    header->addWidget(menuBtn);
+    actLayout->addWidget(menuBtn);
+    header->addWidget(m_actionGroup);
+    for (QWidget *w : {static_cast<QWidget *>(m_navGroup), static_cast<QWidget *>(m_actionGroup)}) w->installEventFilter(this);
+    for (QToolButton *b : {m_back, m_forward, m_up, m_search, m_viewBtn, m_split, m_sideBtn, menuBtn}) b->installEventFilter(this);
     v->addLayout(header);
 
     m_tabBar = new QTabBar;
@@ -286,6 +305,7 @@ MainWindow::MainWindow(const QStringList &paths)
     m_tabBar->setCurrentIndex(0);
     if (paths.isEmpty() && s.restoreSession && s.startSplit) page()->setSplit(true);
     layoutSidebar();
+    applyHeaderStyle();
     syncHeader();
     pane()->focusView();
 }
@@ -398,23 +418,139 @@ void MainWindow::syncHeader()
     syncViewButton();
     m_pathbar->setPath(p->path());
     m_split->setChecked(page()->isSplit());
-    m_sideBtn->setChecked(Settings::get().sidebarVisible);
+    m_sideBtn->setChecked(m_sidebar->isVisible());
     m_sidebar->setCurrentPath(p->path());
     QString name = p->path() == FileOps::trashFiles() ? QString::fromUtf8("Papelera") : QFileInfo(p->path()).fileName();
     setWindowTitle((name.isEmpty() ? "/" : name) + QString::fromUtf8(" — Luna"));
 }
 
+bool MainWindow::narrow() const { return width() < 720; }
+
 void MainWindow::layoutSidebar()
 {
     const Settings &s = Settings::get();
-    m_sidebar->setVisible(s.sidebarVisible);
+    // In a narrow window the sidebar steps aside unless asked for (F9).
+    const bool show = narrow() ? m_sidebarForced : s.sidebarVisible;
+    const bool wasVisible = m_sidebar->isVisible();
+    m_sidebar->setVisible(show);
+    m_sidebar->setMaximumWidth(300);
     const int sideIndex = m_main->indexOf(m_sidebar);
     const int want = s.sidebarRight ? 1 : 0;
-    if (sideIndex != want) m_main->insertWidget(want, m_sidebar);
+    const bool moved = sideIndex != want;
+    if (moved) m_main->insertWidget(want, m_sidebar);
     m_main->setStretchFactor(m_main->indexOf(m_pages), 1);
     m_main->setStretchFactor(m_main->indexOf(m_sidebar), 0);
-    QList<int> sizes = s.sidebarRight ? QList<int>{width() - 220, 220} : QList<int>{220, width() - 220};
-    m_main->setSizes(sizes);
+    if (show && (!wasVisible || moved)) {
+        const int sw = narrow() ? std::min(200, width() / 2) : 220;
+        m_main->setSizes(s.sidebarRight ? QList<int>{width() - sw, sw} : QList<int>{sw, width() - sw});
+    }
+    if (m_sideBtn) m_sideBtn->setChecked(show);
+}
+
+void MainWindow::applyHeaderStyle()
+{
+    const Settings &s = Settings::get();
+    static const int sizes[] = {16, 20, 24};
+    const int icon = sizes[std::clamp(s.toolbarIconSize, 0, 2)];
+    const int h = icon + 16;
+    const int style = s.toolbarStyle;
+    const bool text = style == 1 && !narrow();
+    const bool grouped = style == 2;
+    struct B { QToolButton *b; const char *label; };
+    const B buttons[] = {{m_back, "Atrás"}, {m_forward, "Adelante"}, {m_up, "Subir"}, {m_search, "Buscar"},
+                         {m_viewBtn, ""}, {m_split, "Dividir"}, {m_sideBtn, "Lateral"}, {m_menuBtn, "Menú"}};
+    for (const B &x : buttons) {
+        x.b->setIconSize(QSize(icon, icon));
+        x.b->setToolButtonStyle(text ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
+        if (x.b != m_viewBtn) x.b->setText(QString::fromUtf8(x.label));
+        if (text) {
+            x.b->setMinimumSize(0, h);
+            x.b->setMaximumSize(QWIDGETSIZE_MAX, h);
+        } else {
+            const int w = grouped ? h : h + 2;
+            x.b->setFixedSize(x.b == m_viewBtn ? w + 14 : w, grouped ? h - 2 : h);
+        }
+    }
+    // Which buttons are shown (and what goes first when the window is narrow)
+    const bool tiny = width() < 560;
+    m_forward->setVisible(s.tbForward && !tiny);
+    m_up->setVisible(s.tbUp);
+    m_search->setVisible(s.tbSearch);
+    m_viewBtn->setVisible(s.tbView);
+    m_split->setVisible(s.tbSplit && !tiny);
+    m_sideBtn->setVisible(s.tbSidebar);
+    for (QFrame *g : {m_navGroup, m_actionGroup}) {
+        g->setObjectName(grouped ? "toolGroup" : "");
+        g->layout()->setSpacing(grouped ? 0 : 2);
+        g->style()->unpolish(g);
+        g->style()->polish(g);
+        for (QToolButton *b : g->findChildren<QToolButton *>()) {
+            b->style()->unpolish(b);
+            b->style()->polish(b);
+        }
+    }
+    syncViewButton();
+}
+
+void MainWindow::headerMenu(const QPoint &globalPos)
+{
+    Settings &s = Settings::get();
+    QMenu m(this);
+    m.addSection(QString::fromUtf8("Estilo de la barra"));
+    const char *styles[] = {"Solo iconos", "Iconos y texto", "Iconos juntos"};
+    for (int i = 0; i < 3; ++i) {
+        QAction *a = m.addAction(QString::fromUtf8(styles[i]), this, [i] {
+            Settings::get().toolbarStyle = i;
+            Settings::get().changed();
+        });
+        a->setCheckable(true);
+        a->setChecked(s.toolbarStyle == i);
+    }
+    m.addSection(QString::fromUtf8("Tamaño de los iconos"));
+    const char *sizes[] = {"Pequeños", "Medianos", "Grandes"};
+    for (int i = 0; i < 3; ++i) {
+        QAction *a = m.addAction(QString::fromUtf8(sizes[i]), this, [i] {
+            Settings::get().toolbarIconSize = i;
+            Settings::get().changed();
+        });
+        a->setCheckable(true);
+        a->setChecked(s.toolbarIconSize == i);
+    }
+    m.addSection("Botones");
+    struct T { const char *name; bool *field; };
+    for (T t : {T{"Adelante", &s.tbForward}, T{"Carpeta superior", &s.tbUp}, T{"Buscar", &s.tbSearch},
+                T{"Modo de vista", &s.tbView}, T{"Vista dividida", &s.tbSplit}, T{"Barra lateral", &s.tbSidebar}}) {
+        bool *f = t.field;
+        QAction *a = m.addAction(QString::fromUtf8(t.name), this, [f] {
+            *f = !*f;
+            Settings::get().changed();
+        });
+        a->setCheckable(true);
+        a->setChecked(*f);
+    }
+    m.exec(globalPos);
+}
+
+void MainWindow::resizeEvent(QResizeEvent *e)
+{
+    QMainWindow::resizeEvent(e);
+    if (!m_menuBtn || !m_sidebar) return;   // still being constructed
+    static int lastClass = -1;
+    const int cls = width() < 560 ? 0 : narrow() ? 1 : 2;
+    if (cls == lastClass) return;
+    lastClass = cls;
+    if (cls == 2) m_sidebarForced = false;
+    layoutSidebar();
+    applyHeaderStyle();
+}
+
+bool MainWindow::eventFilter(QObject *o, QEvent *e)
+{
+    if (e->type() == QEvent::ContextMenu) {
+        headerMenu(static_cast<QContextMenuEvent *>(e)->globalPos());
+        return true;
+    }
+    return QMainWindow::eventFilter(o, e);
 }
 
 void MainWindow::applySettings()
@@ -433,6 +569,7 @@ void MainWindow::applySettings()
     lastCounts = s.showItemCounts;
     m_sidebar->reload();
     layoutSidebar();
+    applyHeaderStyle();
     syncHeader();
 }
 
@@ -566,7 +703,12 @@ void MainWindow::addShortcuts()
             o->focusView();
         }
     });
-    sc(QKeySequence("F9"), [] {
+    sc(QKeySequence("F9"), [this] {
+        if (narrow()) {
+            m_sidebarForced = !m_sidebar->isVisible();
+            layoutSidebar();
+            return;
+        }
         Settings::get().sidebarVisible = !Settings::get().sidebarVisible;
         Settings::get().changed();
     });
@@ -582,6 +724,7 @@ void MainWindow::syncViewButton()
     const int m = int(pane()->viewMode());
     m_viewBtn->setIcon(Icons::get().ui(glyphs[m]));
     m_viewBtn->setText(QString::fromUtf8(names[m]) + QString::fromUtf8("  ▾"));
+    m_viewBtn->setToolTip(QString::fromUtf8("Modo de vista: ") + QString::fromUtf8(names[m]));
     for (int i = 0; i < m_viewActions.size(); ++i) m_viewActions[i]->setChecked(i == m);
 }
 

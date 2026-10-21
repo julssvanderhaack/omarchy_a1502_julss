@@ -167,6 +167,10 @@ int main(int argc, char **argv)
         QTimer::singleShot(8000, w, [=] { qApp->quit(); });
     }
     // Scripted screenshots for development: LUNA_SHOTS=<dir> luna <folder> [photo]
+    if (qEnvironmentVariableIsSet("LUNA_SHOT_SIZE")) {
+        const QStringList wh = qEnvironmentVariable("LUNA_SHOT_SIZE").split('x');
+        w->resize(wh.value(0).toInt(), wh.value(1).toInt());
+    }
     if (qEnvironmentVariableIsSet("LUNA_SHOTS")) {
         const QString dir = qEnvironmentVariable("LUNA_SHOTS");
         const QString photo = paths.value(1);

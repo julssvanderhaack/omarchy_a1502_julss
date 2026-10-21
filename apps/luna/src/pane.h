@@ -98,6 +98,7 @@ private:
     void selectPaths(const QStringList &paths, bool edit = false);
     void setupView(QAbstractItemView *v);
     void applyIconSizes();
+    void adjustColumns(QTreeView *t);
 
     QString m_path;
     QStringList m_back, m_forward;

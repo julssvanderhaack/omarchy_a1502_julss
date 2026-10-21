@@ -418,6 +418,25 @@ void Pane::applySettings()
     updateStatus();
 }
 
+// Narrow panes: hide the least useful columns so the name stays readable.
+void Pane::adjustColumns(QTreeView *t)
+{
+    QList<int> optional;
+    if (t == m_details) optional = {FsModel::Owner, FsModel::Permissions, FsModel::Type, FsModel::Modified, FsModel::Size};
+    else optional = {FsModel::Modified, FsModel::Size};
+    for (int c : optional) t->setColumnHidden(c, false);
+    auto nameRoom = [&] {
+        int used = 0;
+        for (int c = 1; c < FsModel::ColumnCount; ++c)
+            if (!t->isColumnHidden(c)) used += t->columnWidth(c);
+        return t->viewport()->width() - used;
+    };
+    for (int c : optional) {
+        if (nameRoom() >= 200) break;
+        t->setColumnHidden(c, true);
+    }
+}
+
 void Pane::applyIconSizes()
 {
     const Settings &s = Settings::get();
@@ -1211,6 +1230,9 @@ bool Pane::eventFilter(QObject *o, QEvent *e)
         }
     }
     if (o == m_overlay->parentWidget() && e->type() == QEvent::Resize) updateOverlay();
+    if (e->type() == QEvent::Resize)
+        for (QTreeView *t : {m_list, m_details, m_tree})
+            if (t && o == t->viewport()) adjustColumns(t);
     if (o == m_title && e->type() == QEvent::ContextMenu) {
         emit activated(this);
         showFolderMenu(static_cast<QContextMenuEvent *>(e)->globalPos());

@@ -54,6 +54,14 @@ void Settings::load()
     thumbPdf = q.value("thumbs/pdf", thumbPdf).toBool();
     terminal = q.value("terminal/command", terminal).toString();
     pathbarText = q.value("view/pathbarText", pathbarText).toBool();
+    toolbarStyle = q.value("toolbar/style", toolbarStyle).toInt();
+    toolbarIconSize = q.value("toolbar/iconSize", toolbarIconSize).toInt();
+    tbForward = q.value("toolbar/forward", tbForward).toBool();
+    tbUp = q.value("toolbar/up", tbUp).toBool();
+    tbSearch = q.value("toolbar/search", tbSearch).toBool();
+    tbView = q.value("toolbar/view", tbView).toBool();
+    tbSplit = q.value("toolbar/split", tbSplit).toBool();
+    tbSidebar = q.value("toolbar/sidebar", tbSidebar).toBool();
     sessionTabs = q.value("session/tabs").toStringList();
     startSplit = q.value("session/split", startSplit).toBool();
 }
@@ -93,6 +101,14 @@ void Settings::save() const
     q.setValue("thumbs/pdf", thumbPdf);
     q.setValue("terminal/command", terminal);
     q.setValue("view/pathbarText", pathbarText);
+    q.setValue("toolbar/style", toolbarStyle);
+    q.setValue("toolbar/iconSize", toolbarIconSize);
+    q.setValue("toolbar/forward", tbForward);
+    q.setValue("toolbar/up", tbUp);
+    q.setValue("toolbar/search", tbSearch);
+    q.setValue("toolbar/view", tbView);
+    q.setValue("toolbar/split", tbSplit);
+    q.setValue("toolbar/sidebar", tbSidebar);
     q.setValue("session/tabs", sessionTabs);
     q.setValue("session/split", startSplit);
 }

@@ -127,7 +127,8 @@ void ResultList::setItems(const std::vector<ResultItem> &items)
         }
         if (it.formula) {
             auto *f = new FormulaView;
-            f->setFormula(it.formula, first ? 22 : 19);
+            const bool table = it.formula && it.formula->kind == MNode::Matrix && !it.formula->text.isEmpty();   // Ruffini / long division
+            f->setFormula(it.formula, first || table ? 22 : 19);
             v->addWidget(f);
         }
         if (!it.text.isEmpty() || !it.latex.isEmpty()) v->addWidget(copyButtons(it, card));

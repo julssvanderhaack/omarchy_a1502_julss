@@ -29,6 +29,8 @@ const Op kOps[] = {
     {"taylor", "Serie de Taylor", "cos(x)"},
     {"sum", "Sumatorio", "1/n^2"},
     {"grad", "Gradiente, hessiana y puntos críticos", "x^3 - 3x + y^2"},
+    {"polydiv", "División de polinomios", "x^4 - 3x^2 + 2x - 5"},
+    {"ruffini", "Regla de Ruffini (y factorización)", "x^3 - 6x^2 + 11x - 6"},
 };
 }
 
@@ -75,6 +77,7 @@ CalcPage::CalcPage(Cas *cas, QWidget *parent) : Page(cas, parent)
         connect(e, &QLineEdit::returnPressed, this, &CalcPage::compute);
         return e;
     };
+    m_g = line({});
     m_var = line(QString::fromUtf8("automática"));
     m_order = new QSpinBox;
     m_order->setRange(1, 30);
@@ -87,6 +90,7 @@ CalcPage::CalcPage(Cas *cas, QWidget *parent) : Page(cas, parent)
     m_dir = new QComboBox;
     m_dir->addItems({QString::fromUtf8("Por ambos lados"), QString::fromUtf8("Por la derecha (x → a⁺)"),
                      QString::fromUtf8("Por la izquierda (x → a⁻)")});
+    m_form->addRow(QString::fromUtf8("Divisor"), m_g);
     m_form->addRow(QString::fromUtf8("Variable"), m_var);
     m_form->addRow(QString::fromUtf8("Orden"), m_order);
     m_form->addRow(QString::fromUtf8("Desde"), m_a);
@@ -136,6 +140,9 @@ void CalcPage::updateFields()
 {
     const QString op = m_op->currentData().toString();
     auto show = [&](QWidget *w, bool on) { m_form->setRowVisible(w, on); };
+    const bool poly = op == "polydiv" || op == "ruffini";
+    show(m_g, poly);
+    m_g->setPlaceholderText(op == "ruffini" ? QString::fromUtf8("x − 2   (o solo 2; vacío = factorizar)") : "x^2 - x + 1");
     show(m_var, true);
     show(m_order, op == "diff" || op == "taylor");
     show(m_a, op == "defint" || op == "double" || op == "sum");
@@ -168,6 +175,7 @@ void CalcPage::compute()
     rq.params["op"] = op;
     rq.params["f"] = f;
     rq.params["var"] = m_var->text();
+    rq.params["g"] = op == "polydiv" && m_g->text().trimmed().isEmpty() ? m_g->placeholderText() : m_g->text();
     rq.params["order"] = m_order->value();
     rq.params["a"] = val(m_a);
     rq.params["b"] = op == "sum" && m_b->text().trimmed().isEmpty() ? "inf" : val(m_b);
@@ -201,6 +209,7 @@ void CalcPage::save(QJsonObject &o) const
     o["op"] = m_op->currentIndex();
     o["f"] = m_f->text();
     o["var"] = m_var->text();
+    o["g"] = m_g->text();
     o["a"] = m_a->text();
     o["b"] = m_b->text();
     o["point"] = m_point->text();
@@ -211,6 +220,7 @@ void CalcPage::load(const QJsonObject &o)
     m_op->setCurrentIndex(o["op"].toInt());
     m_f->setText(o["f"].toString());
     m_var->setText(o["var"].toString());
+    m_g->setText(o["g"].toString());
     m_a->setText(o["a"].toString());
     m_b->setText(o["b"].toString());
     m_point->setText(o["point"].toString());

@@ -2159,10 +2159,371 @@ private:
 
     MPtr dvar(const QString &v) { return M::row({M::text("d"), idNode(v)}); }
 
+    // ------------------------------------------- polynomial division
+    // Coefficients of f in v, highest power first; throws when f is not a polynomial.
+    std::vector<gen> coeffsOf(const gen &f, const QString &v, const QString &what)
+    {
+        const QString src = P(f);
+        bool ok = false;
+        std::vector<gen> out;
+        try {
+            gen c = run(QString("symb2poly(%1,%2)").arg(src, v));
+            if (c.type == giac::_VECT) out.assign(c._VECTptr->begin(), c._VECTptr->end());
+            else out.push_back(c);
+            ok = !out.empty() && P(run(QString("normal(poly2symb(symb2poly(%1,%2),%2)-(%1))").arg(src, v))) == "0";
+            for (auto &k : out)
+                if (varsOf(k).contains(v)) ok = false;
+        } catch (...) {
+        }
+        if (!ok) throw CasError(what + QString::fromUtf8(" no es un polinomio en ") + v + ".");
+        for (auto &k : out) k = run("normal(" + P(k) + ")");
+        while (out.size() > 1 && P(out.front()) == "0") out.erase(out.begin());
+        return out;
+    }
+
+    gen polyOf(const std::vector<gen> &c, const QString &v)
+    {
+        QStringList l;
+        for (auto &k : c) l << P(k);
+        return run(QString("normal(poly2symb([%1],%2))").arg(l.join(","), v));
+    }
+
+    bool isZero(const gen &g) { return P(g) == "0"; }
+    bool negative(const gen &g) { return isNumeric(g) && dv(g) < 0; }
+
+    // c·v^k with its sign in front ("+ 3x²", "− x"); the first term of a row
+    // carries no "+".
+    MPtr termNode(const gen &c, int k, const QString &v, bool first)
+    {
+        const bool neg = negative(c);
+        gen t = run(QString("(%1)*%2^%3").arg(P(neg ? run("-(" + P(c) + ")") : c), v).arg(k));
+        MPtr body = node(isNumeric(c) ? run("normal(" + P(t) + ")") : t);   // keep (a+1)·x² grouped
+        if (first) return neg ? M::row({M::text(QString::fromUtf8("−")), body}) : body;
+        return M::row({M::text(neg ? QString::fromUtf8("− ") : "+ "), body});
+    }
+
+    // A polynomial as a row of terms (zeros left out).
+    MPtr polyNode(const std::vector<gen> &c, const QString &v)
+    {
+        std::vector<MPtr> row;
+        const int deg = int(c.size()) - 1;
+        for (int i = 0; i <= deg; ++i) {
+            if (isZero(c[i])) continue;
+            if (!row.empty()) row.push_back(M::space(3));
+            row.push_back(termNode(c[i], deg - i, v, row.empty()));
+        }
+        return row.empty() ? M::num("0") : M::row(row);
+    }
+
+    // Rational roots of the polynomial with coefficients c, by the Ruffini
+    // rule of thumb: divisors of the constant term over those of the leader.
+    std::vector<gen> rationalRoots(const std::vector<gen> &c)
+    {
+        std::vector<gen> roots;
+        if (c.size() < 2) return roots;
+        if (isZero(c.back())) return {gen(0)};
+        try {
+            gen rr = run("rationalroot(" + P(polyOf(c, "x")) + ")");
+            if (rr.type == giac::_VECT)
+                for (auto &x : *rr._VECTptr)
+                    if (isNumeric(x)) roots.push_back(x);
+        } catch (...) {
+        }
+        std::sort(roots.begin(), roots.end(), [this](const gen &a, const gen &b) {
+            double x = dv(a), y = dv(b);
+            return std::fabs(x) != std::fabs(y) ? std::fabs(x) < std::fabs(y) : x > y;
+        });
+        return roots;
+    }
+
+    // One synthetic division of c by (v − a): the table and the quotient.
+    MPtr ruffiniTable(const std::vector<gen> &c, const gen &a, std::vector<gen> &quot, gen &rest)
+    {
+        const int n = int(c.size());
+        std::vector<gen> b(n), prod(n);
+        b[0] = c[0];
+        for (int i = 1; i < n; ++i) {
+            prod[i] = run(QString("normal((%1)*(%2))").arg(P(a), P(b[i - 1])));
+            b[i] = run(QString("normal((%1)+(%2))").arg(P(c[i]), P(prod[i])));
+        }
+        std::vector<MPtr> cells;
+        cells.push_back(M::row({}));
+        for (auto &k : c) cells.push_back(node(k));
+        cells.push_back(node(a));
+        cells.push_back(M::row({}));
+        for (int i = 1; i < n; ++i) cells.push_back(node(prod[i]));
+        cells.push_back(M::row({}));
+        for (auto &k : b) cells.push_back(node(k));
+        quot.assign(b.begin(), b.end() - 1);
+        rest = b.back();
+        auto t = std::make_shared<MNode>(*M::matrix(n + 1, cells));
+        t->text = "ruffini";
+        return t;
+    }
+
+    MPtr linFactor(const QString &v, const gen &a)
+    {
+        if (isZero(a)) return idNode(v);
+        const bool neg = negative(a);
+        return M::paren(M::row({idNode(v), M::op(neg ? "+" : QString::fromUtf8("−")), node(neg ? run("-(" + P(a) + ")") : a)}));
+    }
+
+    void polyDivision(bool ruffini, const QVariantMap &pm, Response &r, PlotSpec &ps)
+    {
+        QString shown;
+        gen f = userFunction(pm.value("f").toString(), shown);
+        const QString gsrc = pm.value("g").toString().trimmed();
+        gen g = gsrc.isEmpty() ? gen(0) : user(gsrc);
+        QString v = pm.value("var").toString().trimmed();
+        if (v.isEmpty()) {
+            QStringList all = varsOf(gsrc.isEmpty() ? f : run("[" + P(f) + "," + P(g) + "]"));
+            v = all.contains("x") || all.isEmpty() ? "x" : all[0];
+        }
+        std::vector<gen> c = coeffsOf(f, v, QString::fromUtf8("El dividendo"));
+        const int D = int(c.size()) - 1;
+        MPtr Pn = M::row({M::var("P"), M::paren(idNode(v))});
+        auto curve = [&](const gen &h, MPtr label, bool dashed) {
+            Series s;
+            s.kind = Series::Func;
+            s.p.push_back(compileOrThrow(h, {v}));
+            s.label = label;
+            s.dashed = dashed;
+            ps.series.push_back(s);
+        };
+
+        if (ruffini) {
+            if (D < 1) throw CasError(QString::fromUtf8("Ruffini necesita un polinomio de grado 1 o más."));
+            std::vector<gen> roots;
+            gen lead = 1;
+            bool factorMode = gsrc.isEmpty();
+            if (!factorMode) {
+                // "x − a", "2x − 1" or just the number a
+                std::vector<gen> d = varsOf(g).contains(v) ? coeffsOf(g, v, QString::fromUtf8("El divisor")) : std::vector<gen>{1, run("-(" + P(g) + ")")};
+                if (d.size() != 2) throw CasError(QString::fromUtf8("Ruffini divide entre binomios  ") + v + QString::fromUtf8(" − a  (grado 1). Para otros divisores usa «División de polinomios»."));
+                lead = d[0];
+                roots.push_back(run(QString("normal(-(%1)/(%2))").arg(P(d[1]), P(d[0]))));
+            }
+            std::vector<gen> cur = c, found;
+            for (int step = 0; step < 40 && cur.size() > 1; ++step) {
+                gen a;
+                if (factorMode) {
+                    std::vector<gen> rr = rationalRoots(cur);
+                    if (rr.empty()) break;
+                    a = rr[0];
+                } else {
+                    if (step > 0) break;
+                    a = roots[0];
+                }
+                std::vector<gen> q;
+                gen rest;
+                MPtr table = ruffiniTable(cur, a, q, rest);
+                ResultItem it;
+                it.caption = QString::fromUtf8("Ruffini: división entre ") + (isZero(a) ? v : QString("%1 %2 %3").arg(v, negative(a) ? "+" : QString::fromUtf8("−"), P(negative(a) ? run("-(" + P(a) + ")") : a)));
+                it.formula = table;
+                it.text = QString("ruffini: a = %1 → cociente %2, resto %3").arg(P(a), P(polyOf(q, v)), P(rest));
+                r.items.push_back(it);
+                if (!factorMode) {
+                    ResultItem qi = item(QString::fromUtf8("Cociente"), M::row({M::var("C"), M::paren(idNode(v)), M::op("="), polyNode(q, v)}), polyOf(q, v));
+                    r.items.push_back(qi);
+                    r.items.push_back(item(QString::fromUtf8("Resto (teorema del resto: P(a) = R)"),
+                                           M::row({M::var("R"), M::op("="), M::row({M::var("P"), M::paren(node(a))}), M::op("="), node(rest)}), rest));
+                    gen Q = polyOf(q, v);
+                    std::vector<MPtr> id = {Pn, M::op("="), linFactor(v, a), M::text(QString::fromUtf8("·")), M::paren(polyNode(q, v))};
+                    if (!isZero(rest)) id.insert(id.end(), {M::op(negative(rest) ? QString::fromUtf8("−") : "+"), node(negative(rest) ? run("-(" + P(rest) + ")") : rest)});
+                    if (!isZero(rest)) r.items.push_back(item(QString::fromUtf8("Comprobación: P = (x − a)·C + R"), M::row(id), run(QString("(%1-(%2))*(%3)+(%4)").arg(v, P(a), P(Q), P(rest)))));
+                    if (!isZero(lead) && P(lead) != "1") {
+                        gen Q2 = run(QString("normal((%1)/(%2))").arg(P(Q), P(lead)));
+                        r.items.push_back(item(QString::fromUtf8("Dividiendo entre ") + P(g) + QString::fromUtf8(" (el cociente se divide entre ") + P(lead) + ")",
+                                               M::row({M::var("C"), M::op("="), node(Q2)}), Q2));
+                    }
+                    r.summary = QString("C = %1, R = %2").arg(P(Q), P(rest));
+                    if (isZero(rest)) r.items.push_back(item(QString::fromUtf8("Resto 0: ") + P(a) + QString::fromUtf8(" es raíz y (") + v + QString::fromUtf8(" − a) divide a P"),
+                                                             M::row({Pn, M::op("="), linFactor(v, a), M::text(QString::fromUtf8("·")), M::paren(polyNode(q, v))}), f));
+                    curve(f, Pn, false);
+                    Series pt;
+                    pt.kind = Series::Points;
+                    double ax = dv(a), ry = dv(rest);
+                    if (std::isfinite(ax) && std::isfinite(ry)) pt.pts.push_back({ax, ry});
+                    pt.label = M::row({M::var("P"), M::paren(node(a)), M::op("="), node(rest)});
+                    ps.series.push_back(pt);
+                    ps.xmin = ax - 5, ps.xmax = ax + 5;
+                    break;
+                }
+                found.push_back(a);
+                cur = q;
+            }
+            if (factorMode) {
+                if (found.empty()) {
+                    ResultItem it;
+                    it.caption = QString::fromUtf8("Sin raíces racionales (ningún divisor del término independiente entre los del coeficiente principal anula P)");
+                    it.formula = M::text(QString::fromUtf8("Ruffini no puede factorizarlo"));
+                    it.text = P(f);
+                    r.items.push_back(it);
+                    r.summary = P(f);
+                } else {
+                    // P = lead · ∏ (v − a) · rest, equal roots grouped as powers
+                    std::vector<MPtr> prod;
+                    gen restPoly = polyOf(cur, v);
+                    if (cur.size() == 1 && P(cur[0]) != "1") prod.push_back(node(cur[0]));
+                    for (size_t i = 0; i < found.size();) {
+                        size_t k = i;
+                        while (k < found.size() && P(found[k]) == P(found[i])) ++k;
+                        MPtr fac = linFactor(v, found[i]);
+                        prod.push_back(k - i > 1 ? M::pow(fac, M::num(QString::number(k - i))) : fac);
+                        i = k;
+                    }
+                    if (cur.size() > 1) prod.push_back(M::paren(polyNode(cur, v)));
+                    gen fac = run("factor(" + P(f) + ")");
+                    r.items.push_back(item(QString::fromUtf8("Factorización por Ruffini"), M::row({Pn, M::op("="), M::row(prod)}), fac));
+                    QStringList rs;
+                    for (auto &a : found) rs << P(a);
+                    ResultItem ri;
+                    ri.caption = QString::fromUtf8("Raíces racionales");
+                    std::vector<MPtr> row;
+                    for (size_t i = 0; i < found.size(); ++i) {
+                        if (i) row.push_back(M::text(",  "));
+                        row.push_back(M::row({M::sub(idNode(v), M::num(QString::number(i + 1))), M::op("="), node(found[i])}));
+                    }
+                    ri.formula = M::row(row);
+                    ri.text = rs.join(", ");
+                    r.items.push_back(ri);
+                    if (cur.size() > 2)
+                        r.items.push_back(item(QString::fromUtf8("El último cociente no tiene raíces racionales"), polyNode(cur, v), restPoly));
+                    r.summary = P(fac);
+                    curve(f, Pn, false);
+                    Series pt;
+                    pt.kind = Series::Points;
+                    double lo = 0, hi = 0;
+                    for (auto &a : found) {
+                        double x = dv(a);
+                        pt.pts.push_back({x, 0});
+                        lo = std::min(lo, x), hi = std::max(hi, x);
+                    }
+                    pt.label = M::text(QString::fromUtf8("raíces"));
+                    ps.series.push_back(pt);
+                    ps.xmin = lo - 3, ps.xmax = hi + 3;
+                    // fit y to the bumps between the roots, not to the steep ends
+                    const Program &pp = ps.series.front().p[0];
+                    double ylo = -1, yhi = 1;
+                    for (int i = 0; i <= 200; ++i) {
+                        double y = pp.eval1(lo - 0.5 + (hi - lo + 1) * i / 200.0);
+                        if (std::isfinite(y)) ylo = std::min(ylo, y), yhi = std::max(yhi, y);
+                    }
+                    const double m = (yhi - ylo) * 0.25;
+                    ps.ymin = ylo - m, ps.ymax = yhi + m;
+                }
+            }
+            ps.xname = v;
+            return;
+        }
+
+        // ---- long division
+        if (gsrc.isEmpty()) throw CasError(QString::fromUtf8("Escribe el divisor."));
+        std::vector<gen> d = coeffsOf(g, v, QString::fromUtf8("El divisor"));
+        if (d.size() == 1 && isZero(d[0])) throw CasError(QString::fromUtf8("No se puede dividir entre 0."));
+        const int dd = int(d.size()) - 1;
+        std::vector<gen> rem = c, q;
+        const int cols = D + 2;
+        auto empty = [] { return M::row({}); };
+        std::vector<std::vector<MPtr>> rows;
+        std::vector<int> rules;
+        auto newRow = [&] { rows.push_back(std::vector<MPtr>(cols, nullptr)); return int(rows.size()) - 1; };
+        auto fillTerms = [&](int row, const std::vector<gen> &vals, int from, int to) {
+            bool first = true;
+            for (int i = from; i <= to && i <= D; ++i) {
+                if (isZero(vals[i])) continue;
+                rows[row][i] = termNode(vals[i], D - i, v, first);
+                first = false;
+            }
+        };
+        int r0 = newRow();
+        fillTerms(r0, c, 0, D);
+        rows[r0][cols - 1] = polyNode(d, v);
+        for (int k = 0; k + dd <= D; ++k) {
+            if (isZero(rem[k])) {
+                q.push_back(gen(0));
+                continue;
+            }
+            gen qk = run(QString("normal((%1)/(%2))").arg(P(rem[k]), P(d[0])));
+            q.push_back(qk);
+            std::vector<gen> sub(D + 1, gen(0));
+            for (int j = 0; j <= dd; ++j) {
+                sub[k + j] = run(QString("normal(-(%1)*(%2))").arg(P(qk), P(d[j])));
+                rem[k + j] = run(QString("normal((%1)+(%2))").arg(P(rem[k + j]), P(sub[k + j])));
+            }
+            rem[k] = gen(0);
+            int rs = newRow();
+            fillTerms(rs, sub, k, k + dd);
+            int rr = newRow();
+            rules.push_back(rr);
+            fillTerms(rr, rem, k + 1, D);
+            if (!rows[rr][0] && std::all_of(rows[rr].begin(), rows[rr].end() - 1, [](const MPtr &m) { return !m; }))
+                rows[rr][D] = M::num("0");
+        }
+        if (q.empty()) q.push_back(gen(0));
+        if (rows.size() > 1) rows[1][cols - 1] = polyNode(q, v);
+        std::vector<gen> rtail(rem.begin() + std::max(0, D - dd + 1), rem.end());
+        if (dd == 0 || rtail.empty()) rtail = {gen(0)};
+        gen Q = polyOf(q, v), R = polyOf(rtail, v);
+        if (rows.size() > 1) {
+            std::vector<MPtr> cells;
+            for (auto &row : rows)
+                for (auto &m : row) cells.push_back(m ? m : empty());
+            QStringList rl;
+            for (int x : rules) rl << QString::number(x);
+            auto t = std::make_shared<MNode>(*M::matrix(cols, cells));
+            t->text = "longdiv:" + rl.join(",");
+            ResultItem it;
+            it.caption = QString::fromUtf8("División paso a paso");
+            it.formula = t;
+            it.text = QString("quorem(%1,%2,%3) = [%4, %5]").arg(P(f), P(g), v, P(Q), P(R));
+            r.items.push_back(it);
+        }
+        MPtr Dn = M::paren(polyNode(d, v));
+        r.items.push_back(item(QString::fromUtf8("Cociente"), M::row({M::var("C"), M::paren(idNode(v)), M::op("="), node(Q)}), Q));
+        r.items.push_back(item(QString::fromUtf8("Resto"), M::row({M::var("R"), M::paren(idNode(v)), M::op("="), node(R)}), R));
+        // "+ R" or "− (−R)" when R starts negative, never "+ −2x"
+        size_t lead = 0;
+        while (lead + 1 < rtail.size() && isZero(rtail[lead])) ++lead;
+        const bool rneg = negative(rtail[lead]);
+        MPtr absR = node(rneg ? run("normal(-(" + P(R) + "))") : R);
+        MPtr rSign = M::op(rneg ? QString::fromUtf8("−") : "+");
+        std::vector<MPtr> id = {M::paren(polyNode(c, v)), M::op("="), Dn, M::text(QString::fromUtf8("·")), M::paren(node(Q))};
+        if (!isZero(R)) id.insert(id.end(), {rSign, rtail.size() - lead > 1 && rneg ? M::paren(absR) : absR});
+        r.items.push_back(item(QString::fromUtf8("Comprobación: D = d·C + R"), M::row(id), run(QString("(%1)*(%2)+(%3)").arg(P(g), P(Q), P(R)))));
+        if (!isZero(R) && dd > 0) {
+            gen quo = run(QString("(%1)+(%2)/(%3)").arg(P(Q), P(R), P(g)));
+            r.items.push_back(item(QString::fromUtf8("Como fracción"),
+                                   M::row({M::frac(polyNode(c, v), polyNode(d, v)), M::op("="), node(Q), rSign, M::frac(absR, polyNode(d, v))}), quo));
+        } else if (isZero(R)) {
+            ResultItem ex;
+            ex.caption = QString::fromUtf8("División exacta: el divisor es factor del dividendo");
+            ex.formula = M::row({M::paren(polyNode(c, v)), M::op("="), Dn, M::text(QString::fromUtf8("·")), M::paren(node(Q))});
+            ex.text = P(Q);
+            r.items.push_back(ex);
+        }
+        r.summary = QString("C = %1, R = %2").arg(P(Q), P(R));
+        if (dd > 0) {
+            curve(run(QString("(%1)/(%2)").arg(P(f), P(g))), M::frac(M::var("D"), M::var("d")), false);
+            if (!isZero(R)) curve(Q, M::row({M::var("C"), M::paren(idNode(v)), M::text(q.size() <= 2 ? QString::fromUtf8("  (asíntota)") : QString())}), true);
+        } else {
+            curve(f, M::var("D"), false);
+            curve(Q, M::var("C"), true);
+        }
+        ps.xname = v;
+        ps.xmin = -8, ps.xmax = 8;
+    }
+
     void calculus(const Request &rq, Response &r)
     {
         const QVariantMap &pm = rq.params;
         const QString op = pm.value("op").toString();
+        if (op == "polydiv" || op == "ruffini") {
+            auto ps = std::make_shared<PlotSpec>();
+            polyDivision(op == "ruffini", pm, r, *ps);
+            if (!ps->series.empty()) r.plot = ps;
+            return;
+        }
         QString shown;
         gen f = userFunction(pm.value("f").toString(), shown);
         QStringList fv = varsOf(f);

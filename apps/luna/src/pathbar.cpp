@@ -10,6 +10,7 @@
 #include <QHBoxLayout>
 #include <QContextMenuEvent>
 #include <QKeyEvent>
+#include <QLabel>
 #include <QMouseEvent>
 #include <QLineEdit>
 #include <QStackedWidget>
@@ -192,34 +193,21 @@ void PathBar::rebuild()
         crumbs << Crumb{QString(), "/", Icons::get().place("root")};
         tail("", m_path);
     }
-    QFontMetrics fm(font());
-    int avail = width() - 90, used = 0;
-    QList<int> widths;
-    for (auto &c : crumbs) widths << fm.horizontalAdvance(c.label) + (c.icon.isNull() ? 30 : 48);
-    for (int w : widths) used += w;
-    int skipUntil = 1;
-    while (used > avail && skipUntil < crumbs.size() - 1) used -= widths[skipUntil++];
+    // Build every crumb, then drop the least important ones until it fits:
+    // middle folders (replaced by "…"), the first crumb's label, the first
+    // crumb, and only then elide the current folder, which always stays.
+    struct Item { QLabel *sep = nullptr; QToolButton *btn = nullptr; };
+    auto makeSep = [] {
+        auto *l = new QLabel("/");
+        l->setProperty("role", "dim");
+        l->setContentsMargins(1, 0, 1, 0);
+        l->setStyleSheet("background: transparent;");
+        return l;
+    };
+    std::vector<Item> items;
     for (int i = 0; i < crumbs.size(); ++i) {
-        if (i > 0 && i < skipUntil) {
-            if (i == 1) {
-                auto *dots = new QToolButton;
-                dots->setText(QString::fromUtf8("…"));
-                dots->setProperty("role", "crumb");
-                dots->setAutoRaise(true);
-                const QString p = crumbs[skipUntil - 1].path;
-                connect(dots, &QToolButton::clicked, this, [this, p] { emit navigate(p); });
-                m_crumbLayout->addWidget(dots);
-            }
-            continue;
-        }
-        if (i > 0) {
-            auto *sep = new QToolButton;
-            sep->setText("/");
-            sep->setEnabled(false);
-            sep->setAutoRaise(true);
-            sep->setFocusPolicy(Qt::NoFocus);
-            m_crumbLayout->addWidget(sep);
-        }
+        Item it;
+        if (i > 0) it.sep = makeSep();
         auto *b = new QToolButton;
         b->setProperty("role", "crumb");
         b->setAutoRaise(true);
@@ -237,7 +225,95 @@ void PathBar::rebuild()
             b->setChecked(true);
             emit navigate(p);
         });
-        m_crumbLayout->addWidget(b);
+        it.btn = b;
+        items.push_back(it);
+    }
+    auto *dots = new QToolButton;
+    dots->setText(QString::fromUtf8("…"));
+    dots->setProperty("role", "crumb");
+    dots->setAutoRaise(true);
+    dots->setFocusPolicy(Qt::NoFocus);
+    QLabel *dotsSep = makeSep();
+    // Measure with the style sheet applied (bold current crumb, padding).
+    m_crumbs->ensurePolished();
+    for (auto &it : items) {
+        it.btn->setParent(m_crumbs);
+        it.btn->ensurePolished();
+        if (it.sep) {
+            it.sep->setParent(m_crumbs);
+            it.sep->ensurePolished();
+        }
+    }
+    dots->setParent(m_crumbs);
+    dots->ensurePolished();
+    dotsSep->setParent(m_crumbs);
+    dotsSep->ensurePolished();
+    const int n = int(items.size());
+    std::vector<bool> shown(n, true);
+    bool showDots = false, firstIconOnly = false;
+    auto widthOf = [](QWidget *w) { return w ? w->sizeHint().width() : 0; };
+    auto total = [&] {
+        int t = 0;
+        for (int i = 0; i < n; ++i)
+            if (shown[i]) t += widthOf(items[i].btn) + (i > 0 ? widthOf(items[i].sep) : 0);
+        if (showDots) t += widthOf(dots) + widthOf(dotsSep);
+        return t;
+    };
+    m_connect->setVisible(width() >= 300);
+    const int buttons = (m_connect->isVisibleTo(this) ? m_connect->sizeHint().width() : 0) + m_toggle->sizeHint().width();
+    const int avail = std::max(60, width() - buttons - 14);
+    int hiddenDeepest = -1;
+    for (int i = 1; i < n - 1 && total() > avail; ++i) {
+        shown[i] = false;
+        showDots = true;
+        hiddenDeepest = i;
+    }
+    if (total() > avail && n > 1 && !crumbs[0].icon.isNull() && !crumbs[0].label.isEmpty()) {
+        items[0].btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        items[0].btn->setToolTip(crumbs[0].label);
+        firstIconOnly = true;
+    }
+    if (total() > avail && n > 1) {
+        shown[0] = false;
+        showDots = true;
+        if (hiddenDeepest < 0) hiddenDeepest = 0;
+    }
+    if (total() > avail && showDots) showDots = false;   // the up button still goes there
+    if (total() > avail) {   // last resort: elide the current folder's name
+        QToolButton *last = items[n - 1].btn;
+        const int others = total() - widthOf(last);
+        const int room = std::max(40, avail - others - (last->sizeHint().width() - last->fontMetrics().horizontalAdvance(last->text())));
+        last->setToolTip(crumbs[n - 1].label);
+        last->setText(last->fontMetrics().elidedText(crumbs[n - 1].label, Qt::ElideMiddle, room));
+    }
+    Q_UNUSED(firstIconOnly);
+    if (showDots && hiddenDeepest >= 0) {
+        const QString p = crumbs[hiddenDeepest].path;
+        dots->setToolTip(p);
+        connect(dots, &QToolButton::clicked, this, [this, p] { emit navigate(p); });
+    }
+    bool dotsPlaced = false;
+    for (int i = 0; i < n; ++i) {
+        if (!shown[i]) {
+            delete items[i].sep;
+            delete items[i].btn;
+            continue;
+        }
+        if (showDots && !dotsPlaced && i > 0) {
+            if (shown[0]) m_crumbLayout->addWidget(dotsSep);
+            else delete dotsSep;
+            m_crumbLayout->addWidget(dots);
+            dotsPlaced = true;
+        }
+        if (items[i].sep) {
+            if (i > 0 && (shown[i - 1] || dotsPlaced)) m_crumbLayout->addWidget(items[i].sep);
+            else delete items[i].sep;
+        }
+        m_crumbLayout->addWidget(items[i].btn);
+    }
+    if (!dotsPlaced) {
+        delete dots;
+        delete dotsSep;
     }
     m_crumbLayout->addStretch();
 }

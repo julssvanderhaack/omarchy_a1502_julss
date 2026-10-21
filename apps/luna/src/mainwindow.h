@@ -4,6 +4,7 @@
 class Pane;
 class PathBar;
 class Sidebar;
+class QFrame;
 class QLabel;
 class QSplitter;
 class QStackedWidget;
@@ -43,6 +44,8 @@ public:
 
 protected:
     void closeEvent(QCloseEvent *e) override;
+    void resizeEvent(QResizeEvent *e) override;
+    bool eventFilter(QObject *o, QEvent *e) override;
 
 private:
     void wirePane(Pane *p);
@@ -56,13 +59,19 @@ private:
     void showAbout();
     void connectServer(const QString &uri);
     void syncViewButton();
+    void applyHeaderStyle();
+    void headerMenu(const QPoint &globalPos);
+    bool narrow() const;
     QToolButton *toolButton(const QString &glyph, const QString &tip);
 
     QTabBar *m_tabBar;
     QStackedWidget *m_pages;
-    Sidebar *m_sidebar;
+    Sidebar *m_sidebar = nullptr;
     QSplitter *m_main;
-    QToolButton *m_back, *m_forward, *m_up, *m_split, *m_sideBtn, *m_viewBtn;
+    QToolButton *m_back = nullptr, *m_forward = nullptr, *m_up = nullptr, *m_split = nullptr, *m_sideBtn = nullptr, *m_viewBtn = nullptr,
+                *m_search = nullptr, *m_menuBtn = nullptr;
+    QFrame *m_navGroup = nullptr, *m_actionGroup = nullptr;
+    bool m_sidebarForced = false;   // shown with F9 although the window is narrow
     QList<QAction *> m_viewActions;
     PathBar *m_pathbar;
     QLabel *m_status;

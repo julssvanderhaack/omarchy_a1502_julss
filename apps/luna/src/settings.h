@@ -47,6 +47,10 @@ public:
     int thumbMaxMB = 50;
     bool thumbVideos = true;
     bool thumbPdf = true;
+    // Barra superior
+    int toolbarStyle = 0;          // 0 solo iconos, 1 iconos y texto, 2 iconos juntos
+    int toolbarIconSize = 1;       // 0 pequeño, 1 mediano, 2 grande
+    bool tbForward = true, tbUp = true, tbSearch = true, tbView = true, tbSplit = true, tbSidebar = true;
     // Barra de ruta: false = botones (migas), true = texto editable
     bool pathbarText = false;
     // Terminal

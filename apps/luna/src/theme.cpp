@@ -84,7 +84,7 @@ QPushButton:hover, QToolButton:hover { background: %HOVER%; }
 QPushButton:pressed, QToolButton:pressed, QToolButton:checked { background: %SEL%; }
 QPushButton:default, QPushButton[role="primary"] { background: %ACC%; color: %ACCT%; font-weight: bold; }
 QToolButton::menu-indicator { image: none; width: 0; }
-QToolButton[role="crumb"] { padding: 3px 7px; }
+QToolButton[role="crumb"] { padding: 3px 5px; }
 QToolButton[role="crumb"]:checked { background: transparent; color: %ACC%; font-weight: bold; }
 QAbstractItemView {
   background: %BG%; border: none; outline: none;
@@ -121,6 +121,8 @@ QWidget#paneTitle[active="true"] { border-bottom: 2px solid %ACC%; }
 QWidget#pathBar { background: %BG%; border: 1px solid %MUTED%; border-radius: 3px; }
 QWidget#pathBar QLineEdit { border: none; background: transparent; padding: 2px 4px; }
 QWidget#pathBar QStackedWidget, QWidget#pathBar QStackedWidget > QWidget { background: transparent; }
+QFrame#toolGroup { background: %BG%; border: 1px solid %MUTED%; border-radius: 3px; }
+QFrame#toolGroup QToolButton { border-radius: 0; border: none; }
 QSplitter#panes::handle { background: %MUTED%; width: 1px; }
 QStatusBar { color: %DIM%; }
 QStatusBar QLabel { color: %DIM%; }
