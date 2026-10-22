@@ -153,6 +153,10 @@ int main(int argc, char **argv)
     if (sendToRunning(msg.isEmpty() ? QByteArray("\n") : msg)) return 0;
 
     av_log_set_level(AV_LOG_ERROR);
+    // Qt's raster engine splits big fills and blits across a thread pool; for
+    // our small, frequent repaints (lyrics, seek bar) waking 4 threads on a
+    // 2-core CPU costs more than painting on one. Before QApplication exists.
+    if (!qEnvironmentVariableIsSet("QT_NO_GUI_THREADPOOL")) qputenv("QT_NO_GUI_THREADPOOL", "1");
     ProfApp app(argc, argv);
     QApplication::setApplicationName("sonata");
     QApplication::setApplicationDisplayName("Sonata");
