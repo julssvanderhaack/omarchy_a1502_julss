@@ -3,7 +3,9 @@
 #include "fileops.h"
 #include "fsmodel.h"
 #include "icons.h"
+#include "places.h"
 #include "theme.h"
+#include "undo.h"
 #include <QApplication>
 #include <QClipboard>
 #include <QColumnView>
@@ -299,10 +301,10 @@ Pane::Pane(QWidget *parent) : QFrame(parent)
     searchTimer->setInterval(350);
     connect(searchTimer, &QTimer::timeout, this, [this] {
         const QString t = m_filter->text().trimmed();
-        if (m_recursive->isChecked() && t.size() >= 2) m_model->startSearch(t);
+        if (recursiveSearch() && t.size() >= 2) m_model->startSearch(t);
     });
     connect(m_filter, &QLineEdit::textChanged, this, [this, searchTimer](const QString &t) {
-        if (m_recursive->isChecked()) {
+        if (recursiveSearch()) {
             searchTimer->start();
         } else {
             m_proxy->setQuickFilter(t);
@@ -311,12 +313,14 @@ Pane::Pane(QWidget *parent) : QFrame(parent)
         }
     });
     connect(m_filter, &QLineEdit::returnPressed, this, [this, searchTimer] {
+        if (isVirtual()) return;   // a list of files, not a folder tree
         if (!m_recursive->isChecked()) m_recursive->setChecked(true);
         searchTimer->stop();
         if (!m_filter->text().trimmed().isEmpty()) m_model->startSearch(m_filter->text().trimmed());
         m_proxy->setQuickFilter({});
     });
     connect(m_recursive, &QToolButton::toggled, this, [this](bool on) {
+        if (isVirtual()) return;
         if (on && !m_filter->text().trimmed().isEmpty()) {
             m_proxy->setQuickFilter({});
             m_model->startSearch(m_filter->text().trimmed());
@@ -346,6 +350,9 @@ Pane::Pane(QWidget *parent) : QFrame(parent)
     connect(m_model, &QAbstractItemModel::rowsRemoved, this, &Pane::updateOverlay);
     connect(m_selection, &QItemSelectionModel::selectionChanged, this, &Pane::updateStatus);
     connect(m_proxy, &QAbstractItemModel::layoutChanged, this, &Pane::updateStatus);
+    connect(&Starred::get(), &Starred::changed, this, [this] {
+        if (m_path == Places::starred) refresh();
+    });
 
     applySettings();
     setViewMode(Settings::get().viewMode);
@@ -364,6 +371,9 @@ void Pane::setupView(QAbstractItemView *v)
     v->setDefaultDropAction(Qt::MoveAction);
     v->setContextMenuPolicy(Qt::CustomContextMenu);
     v->setMouseTracking(true);
+    // Pixel steps: touchpads glide and SmoothScroll can animate the wheel.
+    v->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    v->setHorizontalScrollMode(QAbstractItemView::ScrollPerPixel);
     v->installEventFilter(this);
     v->viewport()->installEventFilter(this);
     connect(v, &QWidget::customContextMenuRequested, this, [this, v](const QPoint &pos) {
@@ -431,6 +441,10 @@ QStringList Pane::selectedPaths() const { return pathsFor(selectedItems()); }
 
 bool Pane::isTrash() const { return m_path == FileOps::trashFiles(); }
 
+bool Pane::isVirtual() const { return Places::isVirtual(m_path); }
+
+bool Pane::recursiveSearch() const { return m_recursive->isChecked() && !isVirtual(); }
+
 void Pane::setActive(bool a)
 {
     m_title->setProperty("active", a);
@@ -481,9 +495,18 @@ void Pane::adjustColumns(QTreeView *t)
 void Pane::applyIconSizes()
 {
     const Settings &s = Settings::get();
+    QFont vf = QApplication::font(m_icons);
+    for (QAbstractItemView *v : {static_cast<QAbstractItemView *>(m_icons), static_cast<QAbstractItemView *>(m_compact),
+                                 static_cast<QAbstractItemView *>(m_list), static_cast<QAbstractItemView *>(m_details),
+                                 static_cast<QAbstractItemView *>(m_tree), static_cast<QAbstractItemView *>(m_columns)}) {
+        QFont f = QApplication::font(v);   // each view class keeps the platform theme's font
+        if (s.viewFontPt > 0) f.setPointSizeF(s.viewFontPt);
+        if (v == m_icons) vf = f;
+        if (v->font() != f) v->setFont(f);
+    }
     const int is = Settings::iconSizeFor(s.iconZoom);
     m_icons->setIconSize(QSize(is, is));
-    const int gw = std::max(is + 60, 128), gh = is + QFontMetrics(font()).height() * 3 + 22;
+    const int gw = std::max(is + 60, 128), gh = is + QFontMetrics(vf).height() * 3 + 22;
     m_icons->setGridSize(QSize(gw, gh));
     if (auto *d = dynamic_cast<IconDelegate *>(m_icons->itemDelegate())) {
         d->iconSize = is;
@@ -527,11 +550,11 @@ void Pane::zoom(int delta)
 
 void Pane::setPath(const QString &path0, bool record, const QStringList &select)
 {
-    QString path = QDir::cleanPath(path0);
+    QString path = Places::isVirtual(path0) ? path0 : QDir::cleanPath(path0);
     if (path.isEmpty()) return;
     QFileInfo fi(path);
     QStringList sel = select;
-    if (fi.exists() && !fi.isDir()) {   // a file: open its folder and select it
+    if (!Places::isVirtual(path) && fi.exists() && !fi.isDir()) {   // a file: open its folder and select it
         sel = {path};
         path = fi.absolutePath();
     }
@@ -541,29 +564,28 @@ void Pane::setPath(const QString &path0, bool record, const QStringList &select)
     }
     closeFilter();
     m_path = path;
-    {
-        QString name = isTrash() ? QString::fromUtf8("Papelera") : path == QDir::homePath() ? QString::fromUtf8("Carpeta personal") : QFileInfo(path).fileName();
-        if (name.isEmpty()) name = "/";
-        m_titleLabel->setText(QString("<b>%1</b>&nbsp;&nbsp;<span style=\"color:%2\">%3</span>")
-                                  .arg(name.toHtmlEscaped(), Theme::get().fgDim.name(), path.toHtmlEscaped()));
-    }
+    m_titleLabel->setText(QString("<b>%1</b>&nbsp;&nbsp;<span style=\"color:%2\">%3</span>")
+                              .arg(Places::displayName(path).toHtmlEscaped(), Theme::get().fgDim.name(), isVirtual() ? QString() : path.toHtmlEscaped()));
     m_trashBar->setVisible(isTrash());
-    m_model->setRoot(path);
+    m_recursive->setVisible(!isVirtual());
+    if (isVirtual()) m_model->setPaths(path, Places::contents(path));
+    else m_model->setRoot(path);
     m_pendingSelect = sel;
     m_pendingEdit = false;
     m_columns->setRootIndex({});
     // Free space comes from statvfs, which can stall on a dead network mount.
     m_freeBytes = -1;
     QPointer<Pane> self(this);
-    QThreadPool::globalInstance()->start([self, path] {
-        QStorageInfo si(path);
-        const qint64 free = si.isValid() ? si.bytesAvailable() : -1;
-        QMetaObject::invokeMethod(qApp, [self, path, free] {
-            if (!self || self->m_path != path) return;
-            self->m_freeBytes = free;
-            self->updateStatus();
-        }, Qt::QueuedConnection);
-    });
+    if (!isVirtual())
+        QThreadPool::globalInstance()->start([self, path] {
+            QStorageInfo si(path);
+            const qint64 free = si.isValid() ? si.bytesAvailable() : -1;
+            QMetaObject::invokeMethod(qApp, [self, path, free] {
+                if (!self || self->m_path != path) return;
+                self->m_freeBytes = free;
+                self->updateStatus();
+            }, Qt::QueuedConnection);
+        });
     emit pathChanged(path);
     emit historyChanged();
     updateStatus();
@@ -588,11 +610,20 @@ void Pane::up()
 {
     if (m_path == "/") return;
     const QString cur = m_path;
-    QString parent = isTrash() ? QDir::homePath() : QFileInfo(m_path).absolutePath();
+    QString parent = isTrash() || isVirtual() ? QDir::homePath() : QFileInfo(m_path).absolutePath();
     setPath(parent, true, {cur});
 }
 
-void Pane::refresh() { m_model->refresh(); }
+void Pane::refresh()
+{
+    if (isVirtual()) {
+        const QStringList keep = selectedPaths();
+        m_model->setPaths(m_path, Places::contents(m_path));
+        m_pendingSelect = keep;
+        return;
+    }
+    m_model->refresh();
+}
 
 void Pane::setSplitMode(bool split) { m_title->setVisible(split); }
 
@@ -660,6 +691,7 @@ void Pane::openFiles(const QStringList &paths)
         else toOpen << p;
     }
     if (toOpen.isEmpty()) return;
+    Recent::add(toOpen);
     const QStringList none = Apps::get().openDefault(toOpen);
     if (!none.isEmpty()) {
         OpenWithDialog d(none, this);
@@ -695,6 +727,7 @@ void Pane::openWithDialog()
     OpenWithDialog d(paths, this);
     if (d.exec() != QDialog::Accepted) return;
     if (d.makeDefault()) Apps::get().setDefault(QMimeDatabase().mimeTypeForFile(paths[0]).name(), d.chosen());
+    Recent::add(paths);
     Apps::get().launch(d.chosen(), paths);
 }
 
@@ -707,7 +740,10 @@ QMenu *Pane::openWithMenu(const QStringList &paths, QWidget *parent)
     for (const AppInfo *a : Apps::get().forMime(mime)) {
         QString label = a->name + (a->id == def ? QString::fromUtf8("  (predeterminada)") : QString());
         const QString id = a->id;
-        m->addAction(Icons::get().app(a->icon), label, this, [paths, id] { Apps::get().launch(id, paths); });
+        m->addAction(Icons::get().app(a->icon), label, this, [paths, id] {
+            Recent::add(paths);
+            Apps::get().launch(id, paths);
+        });
     }
     if (!m->isEmpty()) m->addSeparator();
     m->addAction(QString::fromUtf8("Otra aplicación…"), this, &Pane::openWithDialog);
@@ -850,13 +886,17 @@ void Pane::renameSelected()
     const int width = QString::number(paths.size()).size();
     int i = 1;
     QStringList errors;
+    Undo::Pairs renamed;
     for (const QString &p : paths) {
         QFileInfo fi(p);
         QString name = pattern;
         name.replace('#', QString("%1").arg(i++, width, 10, QChar('0')));
         if (!fi.isDir() && !fi.suffix().isEmpty()) name += "." + fi.suffix();
-        if (!QFile::rename(p, fi.absolutePath() + '/' + name)) errors << fi.fileName();
+        const QString to = fi.absolutePath() + '/' + name;
+        if (!QFile::rename(p, to)) errors << fi.fileName();
+        else renamed.append({p, to});
     }
+    Undo::get().record(Undo::Rename, renamed);
     if (!errors.isEmpty()) QMessageBox::warning(this, "Renombrar", QString::fromUtf8("No se pudieron renombrar:\n") + errors.join('\n'));
     m_model->refresh();
 }
@@ -871,6 +911,7 @@ void Pane::newFolder()
     }
     m_pendingSelect = {m_path + '/' + name};
     m_pendingEdit = true;
+    Undo::get().record(Undo::Create, {{QString(), m_path + '/' + name}}, true);
     m_model->refresh();
 }
 
@@ -886,6 +927,7 @@ void Pane::newFile()
     f.close();
     m_pendingSelect = {f.fileName()};
     m_pendingEdit = true;
+    Undo::get().record(Undo::Create, {{QString(), f.fileName()}});
     m_model->refresh();
 }
 
@@ -907,7 +949,7 @@ void Pane::cutSelection()
 
 void Pane::paste()
 {
-    if (isTrash()) return;
+    if (isTrash() || isVirtual()) return;
     bool cut = false;
     QStringList srcs = FileOps::fromClipboard(&cut);
     if (srcs.isEmpty()) return;
@@ -975,6 +1017,7 @@ void Pane::openTerminal()
     QString dir = m_path;
     QStringList sel = selectedPaths();
     if (sel.size() == 1 && QFileInfo(sel[0]).isDir()) dir = sel[0];
+    else if (isVirtual()) dir = sel.isEmpty() ? QDir::homePath() : QFileInfo(sel[0]).absolutePath();
     Apps::get().runTerminal(dir);
 }
 
@@ -989,13 +1032,13 @@ void Pane::copyPath()
 void Pane::createLink()
 {
     QStringList p = selectedPaths();
-    if (!p.isEmpty()) FileOps::get().link(p, m_path);
+    if (!p.isEmpty() && !isVirtual()) FileOps::get().link(p, m_path);
 }
 
 void Pane::compressSelection()
 {
     QStringList p = selectedPaths();
-    if (p.isEmpty()) return;
+    if (p.isEmpty() || isVirtual()) return;
     QString base = p.size() == 1 ? QFileInfo(p[0]).completeBaseName() : QFileInfo(m_path).fileName();
     if (base.isEmpty()) base = "archivo";
     QStringList formats = {".zip", ".tar.gz", ".tar.xz", ".tar.zst", ".7z"};
@@ -1022,6 +1065,7 @@ void Pane::compressSelection()
 
 void Pane::extractSelection()
 {
+    if (isVirtual()) return;
     for (const QString &p : selectedPaths()) {
         QFileInfo fi(p);
         QString base = fi.fileName();
@@ -1085,7 +1129,8 @@ void Pane::closeFilter()
     m_filter->blockSignals(false);
     m_proxy->setQuickFilter({});
     m_recursive->setChecked(Settings::get().searchRecursiveDefault);
-    if (wasSearch) m_model->setRoot(m_path);
+    if (isVirtual()) m_proxy->setQuickFilter({});
+    else if (wasSearch) m_model->setRoot(m_path);
     focusView();
 }
 
@@ -1121,8 +1166,10 @@ void Pane::updateOverlay()
     QString text;
     if (!m_model->error().isEmpty()) text = m_model->error();
     else if (!m_model->isLoading() && m_proxy->rowCount() == 0)
-        text = m_model->searching() ? QString::fromUtf8("Sin resultados")
+        text = m_model->searching() && !isVirtual() ? QString::fromUtf8("Sin resultados")
                : !m_proxy->quickFilter().isEmpty() ? QString::fromUtf8("Nada coincide con «%1»").arg(m_proxy->quickFilter())
+               : m_path == Places::recent  ? QString::fromUtf8("No has abierto archivos últimamente")
+               : m_path == Places::starred ? QString::fromUtf8("Nada destacado todavía: clic derecho → Destacar")
                : isTrash() ? QString::fromUtf8("La papelera está vacía")
                            : QString::fromUtf8("Carpeta vacía");
     m_overlay->setText(text);
@@ -1185,6 +1232,15 @@ void Pane::contextMenu(const QPoint &pos, bool onItem)
                 else FileOps::get().copy(s, sel[0]);
             })->setEnabled(!FileOps::fromClipboard(nullptr).isEmpty());
         m.addAction(ic.ui("copy"), "Copiar ruta", this, &Pane::copyPath);
+        if (isVirtual() && sel.size() == 1) {
+            const QString item = sel[0];
+            m.addAction(ic.ui("open"), QString::fromUtf8("Abrir la carpeta que lo contiene"), this,
+                        [this, item] { setPath(QFileInfo(item).absolutePath(), true, {item}); });
+        }
+        bool allStarred = true;
+        for (const QString &x : sel) allStarred &= Starred::get().contains(x);
+        if (allStarred) m.addAction(ic.ui("star"), "Quitar de destacados", this, [sel] { Starred::get().remove(sel); });
+        else m.addAction(ic.ui("star"), "Destacar", this, [sel] { Starred::get().add(sel); });
         m.addSeparator();
         m.addMenu(transferMenu(true, &m));
         m.addMenu(transferMenu(false, &m));
@@ -1194,9 +1250,11 @@ void Pane::contextMenu(const QPoint &pos, bool onItem)
         m.addAction(ic.ui("trash"), "Mover a la papelera", QKeySequence::Delete, this, &Pane::trashSelection);
         m.addAction(ic.ui("cancel"), "Eliminar definitivamente", QKeySequence("Shift+Del"), this, &Pane::deleteSelection);
         m.addSeparator();
-        if (archive) m.addAction(ic.ui("open"), QString::fromUtf8("Extraer aquí"), this, &Pane::extractSelection);
-        m.addAction(ic.ui("copy"), QString::fromUtf8("Comprimir…"), this, &Pane::compressSelection);
-        m.addAction(ic.ui("star"), "Crear enlace", this, &Pane::createLink);
+        if (!isVirtual()) {   // these create things in the current folder
+            if (archive) m.addAction(ic.ui("open"), QString::fromUtf8("Extraer aquí"), this, &Pane::extractSelection);
+            m.addAction(ic.ui("copy"), QString::fromUtf8("Comprimir…"), this, &Pane::compressSelection);
+            m.addAction(ic.ui("star"), "Crear enlace", this, &Pane::createLink);
+        }
         if (sel.size() == 1 && allDirs) m.addAction(ic.ui("star"), QString::fromUtf8("Añadir a marcadores"), this, [this, sel] { emit bookmarkRequested(sel[0]); });
         m.addSeparator();
         m.addAction(ic.ui("info"), "Propiedades", QKeySequence("Alt+Return"), this, [this, sel] { emit propertiesRequested(sel); });
@@ -1206,12 +1264,18 @@ void Pane::contextMenu(const QPoint &pos, bool onItem)
             m.exec(pos);
             return;
         }
-        m.addAction(ic.ui("newfolder"), "Nueva carpeta", QKeySequence("Ctrl+Shift+N"), this, &Pane::newFolder);
-        m.addAction(ic.ui("edit"), QString::fromUtf8("Nuevo archivo vacío"), this, &Pane::newFile);
-        m.addAction(ic.ui("paste"), "Pegar", QKeySequence::Paste, this, &Pane::paste)->setEnabled(!FileOps::fromClipboard(nullptr).isEmpty());
+        Undo &u = Undo::get();
+        m.addAction(ic.ui("restore"), u.undoText(), QKeySequence::Undo, &u, &Undo::undo)->setEnabled(u.canUndo());
+        m.addAction(ic.ui("restore"), u.redoText(), QKeySequence("Ctrl+Shift+Z"), &u, &Undo::redo)->setEnabled(u.canRedo());
         m.addSeparator();
-        m.addAction(ic.ui("terminal"), "Abrir terminal aquí", QKeySequence("F4"), this, &Pane::openTerminal);
-        m.addAction(ic.ui("copy"), "Copiar ruta de la carpeta", this, &Pane::copyPath);
+        if (!isVirtual()) {
+            m.addAction(ic.ui("newfolder"), "Nueva carpeta", QKeySequence("Ctrl+Shift+N"), this, &Pane::newFolder);
+            m.addAction(ic.ui("edit"), QString::fromUtf8("Nuevo archivo vacío"), this, &Pane::newFile);
+            m.addAction(ic.ui("paste"), "Pegar", QKeySequence::Paste, this, &Pane::paste)->setEnabled(!FileOps::fromClipboard(nullptr).isEmpty());
+            m.addSeparator();
+            m.addAction(ic.ui("terminal"), "Abrir terminal aquí", QKeySequence("F4"), this, &Pane::openTerminal);
+            m.addAction(ic.ui("copy"), "Copiar ruta de la carpeta", this, &Pane::copyPath);
+        }
         m.addAction(QString::fromUtf8("Seleccionar todo"), QKeySequence::SelectAll, this, &Pane::selectAll);
         m.addSeparator();
         auto *viewMenu = m.addMenu(ic.ui("icons"), "Vista");
@@ -1255,10 +1319,12 @@ void Pane::contextMenu(const QPoint &pos, bool onItem)
         });
         hid->setCheckable(true);
         hid->setChecked(Settings::get().showHidden);
-        m.addSeparator();
-        m.addAction(ic.ui("star"), QString::fromUtf8("Añadir carpeta a marcadores"), QKeySequence("Ctrl+D"), this,
-                    [this] { emit bookmarkRequested(m_path); });
-        m.addAction(ic.ui("info"), "Propiedades de la carpeta", this, [this] { emit propertiesRequested({m_path}); });
+        if (!isVirtual()) {
+            m.addSeparator();
+            m.addAction(ic.ui("star"), QString::fromUtf8("Añadir carpeta a marcadores"), QKeySequence("Ctrl+D"), this,
+                        [this] { emit bookmarkRequested(m_path); });
+            m.addAction(ic.ui("info"), "Propiedades de la carpeta", this, [this] { emit propertiesRequested({m_path}); });
+        }
     }
     m.exec(pos);
 }

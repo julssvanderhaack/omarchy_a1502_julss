@@ -5,6 +5,7 @@ class Pane;
 class PathBar;
 class Sidebar;
 class QFrame;
+class QHBoxLayout;
 class QLabel;
 class QSplitter;
 class QStackedWidget;
@@ -60,6 +61,7 @@ private:
     void connectServer(const QString &uri);
     void syncViewButton();
     void applyHeaderStyle();
+    void rebuildHeader();
     void headerMenu(const QPoint &globalPos);
     bool narrow() const;
     QToolButton *toolButton(const QString &glyph, const QString &tip);
@@ -70,7 +72,9 @@ private:
     QSplitter *m_main;
     QToolButton *m_back = nullptr, *m_forward = nullptr, *m_up = nullptr, *m_split = nullptr, *m_sideBtn = nullptr, *m_viewBtn = nullptr,
                 *m_search = nullptr, *m_menuBtn = nullptr;
-    QFrame *m_navGroup = nullptr, *m_actionGroup = nullptr;
+    QList<QFrame *> m_groups;        // header button groups, see rebuildHeader()
+    QHBoxLayout *m_header = nullptr;
+    QStringList m_headerLayout;      // layout the header was last built from
     bool m_sidebarForced = false;   // shown with F9 although the window is narrow
     QList<QAction *> m_viewActions;
     PathBar *m_pathbar;

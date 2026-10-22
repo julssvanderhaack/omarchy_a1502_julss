@@ -38,6 +38,8 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include "fsmodel.h"
+#include "places.h"
+#include "undo.h"
 
 // ------------------------------------------------------------------ TabPage
 TabPage::TabPage(const QString &path, QWidget *parent) : QWidget(parent)
@@ -113,13 +115,6 @@ MainWindow::MainWindow(const QStringList &paths)
     connect(m_back, &QToolButton::clicked, this, [this] { pane()->back(); });
     connect(m_forward, &QToolButton::clicked, this, [this] { pane()->forward(); });
     connect(m_up, &QToolButton::clicked, this, [this] { pane()->up(); });
-    m_navGroup = new QFrame;
-    auto *navLayout = new QHBoxLayout(m_navGroup);
-    navLayout->setContentsMargins(0, 0, 0, 0);
-    navLayout->addWidget(m_back);
-    navLayout->addWidget(m_forward);
-    navLayout->addWidget(m_up);
-    header->addWidget(m_navGroup);
     m_pathbar = new PathBar;
     connect(m_pathbar, &PathBar::navigate, this, [this](const QString &p) {
         pane()->setPath(p);
@@ -127,18 +122,11 @@ MainWindow::MainWindow(const QStringList &paths)
     });
     connect(m_pathbar, &PathBar::connectRequested, this, &MainWindow::connectServer);
     connect(m_pathbar, &PathBar::folderMenuRequested, this, [this](const QPoint &p) { pane()->showFolderMenu(p); });
-    header->addSpacing(4);
-    header->addWidget(m_pathbar, 1);
-    header->addSpacing(6);
-    m_actionGroup = new QFrame;
-    auto *actLayout = new QHBoxLayout(m_actionGroup);
-    actLayout->setContentsMargins(0, 0, 0, 0);
     m_search = toolButton("search", "Buscar (Ctrl+F)");
     connect(m_search, &QToolButton::clicked, this, [this] {
         if (pane()->filterVisible()) pane()->closeFilter();
         else pane()->showFilter();
     });
-    actLayout->addWidget(m_search);
 
     // View mode: one dropdown with names
     m_viewBtn = new QToolButton;
@@ -177,14 +165,12 @@ MainWindow::MainWindow(const QStringList &paths)
     hid->setCheckable(true);
     connect(viewMenu, &QMenu::aboutToShow, hid, [hid] { hid->setChecked(Settings::get().showHidden); });
     m_viewBtn->setMenu(viewMenu);
-    actLayout->addWidget(m_viewBtn);
     m_split = toolButton("split", "Vista dividida (F3)");
     m_split->setCheckable(true);
     connect(m_split, &QToolButton::clicked, this, [this](bool on) {
         page()->setSplit(on);
         syncHeader();
     });
-    actLayout->addWidget(m_split);
     m_sideBtn = toolButton("sidebar", "Barra lateral (F9)");
     m_sideBtn->setCheckable(true);
     connect(m_sideBtn, &QToolButton::clicked, this, [this](bool on) {
@@ -196,7 +182,6 @@ MainWindow::MainWindow(const QStringList &paths)
         Settings::get().sidebarVisible = on;
         Settings::get().changed();
     });
-    actLayout->addWidget(m_sideBtn);
     auto *menuBtn = toolButton("menu", "Menú");
     m_menuBtn = menuBtn;
     menuBtn->setPopupMode(QToolButton::InstantPopup);
@@ -205,6 +190,15 @@ MainWindow::MainWindow(const QStringList &paths)
     menu->addAction(Icons::get().ui("newtab"), QString::fromUtf8("Pestaña nueva"), QKeySequence("Ctrl+T"), this, [this] { newTab(pane()->path()); });
     menu->addAction(Icons::get().ui("newfolder"), "Nueva carpeta", QKeySequence("Ctrl+Shift+N"), this, [this] { pane()->newFolder(); });
     menu->addSeparator();
+    auto *undo = menu->addAction(Icons::get().ui("restore"), "Deshacer", QKeySequence::Undo, &Undo::get(), &Undo::undo);
+    auto *redo = menu->addAction(Icons::get().ui("restore"), "Rehacer", QKeySequence("Ctrl+Shift+Z"), &Undo::get(), &Undo::redo);
+    connect(menu, &QMenu::aboutToShow, undo, [undo, redo] {
+        undo->setText(Undo::get().undoText());
+        undo->setEnabled(Undo::get().canUndo());
+        redo->setText(Undo::get().redoText());
+        redo->setEnabled(Undo::get().canRedo());
+    });
+    menu->addSeparator();
     auto *hidden = menu->addAction(Icons::get().ui("hidden"), "Mostrar archivos ocultos", QKeySequence("Ctrl+H"), this, [] {
         Settings::get().showHidden = !Settings::get().showHidden;
         Settings::get().changed();
@@ -212,6 +206,8 @@ MainWindow::MainWindow(const QStringList &paths)
     hidden->setCheckable(true);
     connect(menu, &QMenu::aboutToShow, hidden, [hidden] { hidden->setChecked(Settings::get().showHidden); });
     menu->addAction(Icons::get().ui("trash"), "Ir a la papelera", this, [this] { pane()->setPath(FileOps::trashFiles()); });
+    menu->addAction(Icons::get().ui("refresh"), "Recientes", this, [this] { pane()->setPath(Places::recent); });
+    menu->addAction(Icons::get().ui("star"), "Destacados", this, [this] { pane()->setPath(Places::starred); });
     menu->addAction(Icons::get().ui("network"), QString::fromUtf8("Conectar a un servidor…"), this, [this] { connectServer({}); });
     menu->addSeparator();
     menu->addAction(Icons::get().ui("icons"), "Barra superior…", this, [this] { headerMenu(QCursor::pos()); });
@@ -230,11 +226,10 @@ MainWindow::MainWindow(const QStringList &paths)
     };
     labelsOnly(menu);
     labelsOnly(m_viewBtn->menu());
-    actLayout->addWidget(menuBtn);
-    header->addWidget(m_actionGroup);
-    for (QWidget *w : {static_cast<QWidget *>(m_navGroup), static_cast<QWidget *>(m_actionGroup)}) w->installEventFilter(this);
     for (QToolButton *b : {m_back, m_forward, m_up, m_search, m_viewBtn, m_split, m_sideBtn, menuBtn}) b->installEventFilter(this);
+    m_header = header;
     v->addLayout(header);
+    rebuildHeader();
 
     m_tabBar = new QTabBar;
     m_tabBar->setMovable(true);
@@ -283,7 +278,11 @@ MainWindow::MainWindow(const QStringList &paths)
         QStringList srcs;
         for (const QUrl &u : urls)
             if (u.isLocalFile()) srcs << u.toLocalFile();
-        if (srcs.isEmpty()) return;
+        if (srcs.isEmpty() || dest == Places::recent) return;
+        if (dest == Places::starred) {   // dropping on Destacados stars, like Nautilus
+            Starred::get().add(srcs);
+            return;
+        }
         if (dest == FileOps::trashFiles()) {
             FileOps::get().trash(srcs);
             return;
@@ -292,6 +291,7 @@ MainWindow::MainWindow(const QStringList &paths)
         else FileOps::get().move(srcs, dest);
     });
     connect(&FileOps::get(), &FileOps::jobStarted, this, &MainWindow::trackJob);
+    connect(&Undo::get(), &Undo::message, this, [this](const QString &t) { m_status->setText(t); });
     connect(m_sidebar, &Sidebar::connectRequested, this, &MainWindow::connectServer);
     connect(&Remote::get(), &Remote::mountsChanged, m_sidebar, &Sidebar::reload);
     connect(&Settings::get(), &Settings::updated, this, &MainWindow::applySettings);
@@ -335,7 +335,7 @@ int MainWindow::newTab(const QString &path, bool activate)
     });
     wirePane(tp->first());
     const QString p = tp->first()->path();
-    int i = m_tabBar->addTab(p == QDir::homePath() ? QString::fromUtf8("Carpeta personal") : QFileInfo(p).fileName());
+    int i = m_tabBar->addTab(Places::displayName(p));
     m_tabBar->setTabData(i, QVariant::fromValue<QWidget *>(tp));
     m_tabBar->setTabToolTip(i, p);
     auto *close = new QToolButton;
@@ -381,10 +381,7 @@ void MainWindow::wirePane(Pane *p)
     connect(p, &Pane::pathChanged, this, [this, p, tp](const QString &path) {
         for (int i = 0; i < m_tabBar->count(); ++i)
             if (m_tabBar->tabData(i).value<QWidget *>() == tp && tp->active() == p) {
-                QString name = path == FileOps::trashFiles() ? QString::fromUtf8("Papelera") : path == QDir::homePath() ? QString::fromUtf8("Carpeta personal")
-                                                                                                                           : QFileInfo(path).fileName();
-                if (name.isEmpty()) name = "/";
-                m_tabBar->setTabText(i, name);
+                m_tabBar->setTabText(i, Places::displayName(path));
                 m_tabBar->setTabToolTip(i, path);
             }
         if (pane() == p) syncHeader();
@@ -420,8 +417,7 @@ void MainWindow::syncHeader()
     m_split->setChecked(page()->isSplit());
     m_sideBtn->setChecked(m_sidebar->isVisible());
     m_sidebar->setCurrentPath(p->path());
-    QString name = p->path() == FileOps::trashFiles() ? QString::fromUtf8("Papelera") : QFileInfo(p->path()).fileName();
-    setWindowTitle((name.isEmpty() ? "/" : name) + QString::fromUtf8(" — Luna"));
+    setWindowTitle(Places::displayName(p->path()) + QString::fromUtf8(" — Luna"));
 }
 
 bool MainWindow::narrow() const { return width() < 720; }
@@ -447,8 +443,54 @@ void MainWindow::layoutSidebar()
     if (m_sideBtn) m_sideBtn->setChecked(show);
 }
 
+// Lays the header out from Settings::toolbarLayout: groups of buttons
+// split by "|", with the path bar taking the free room wherever it is.
+void MainWindow::rebuildHeader()
+{
+    const QStringList layout = Settings::get().toolbarLayout;
+    if (layout == m_headerLayout) return;
+    m_headerLayout = layout;
+    const QHash<QString, QWidget *> items = {{"back", m_back}, {"forward", m_forward}, {"up", m_up}, {"path", m_pathbar}, {"search", m_search},
+                                             {"view", m_viewBtn}, {"split", m_split}, {"sidebar", m_sideBtn}, {"menu", m_menuBtn}};
+    for (QWidget *w : items) {   // park them while the groups are rebuilt
+        w->hide();
+        w->setParent(this);
+    }
+    qDeleteAll(m_groups);
+    m_groups.clear();
+    while (QLayoutItem *it = m_header->takeAt(0)) delete it;
+    QFrame *group = nullptr;
+    for (const QString &t : layout) {
+        if (t == "|") {
+            group = nullptr;
+            continue;
+        }
+        QWidget *w = items.value(t);
+        if (!w) continue;   // hidden ("-name")
+        if (w == m_pathbar) {
+            group = nullptr;
+            if (m_header->count()) m_header->addSpacing(4);
+            m_header->addWidget(w, 1);
+            w->show();
+            continue;
+        }
+        if (!group) {
+            if (m_header->count()) m_header->addSpacing(m_header->itemAt(m_header->count() - 1)->widget() == m_pathbar ? 6 : 8);
+            group = new QFrame;
+            auto *l = new QHBoxLayout(group);
+            l->setContentsMargins(0, 0, 0, 0);
+            group->installEventFilter(this);   // right click: header menu
+            m_header->addWidget(group);
+            m_groups << group;
+        }
+        group->layout()->addWidget(w);
+        w->show();
+    }
+}
+
 void MainWindow::applyHeaderStyle()
 {
+    rebuildHeader();
     const Settings &s = Settings::get();
     static const int sizes[] = {16, 20, 24};
     const int icon = sizes[std::clamp(s.toolbarIconSize, 0, 2)];
@@ -471,15 +513,11 @@ void MainWindow::applyHeaderStyle()
             x.b->setFixedSize(x.b == m_viewBtn ? w + 14 : w, grouped ? h - 2 : h);
         }
     }
-    // Which buttons are shown (and what goes first when the window is narrow)
+    // What goes first when the window is narrow
     const bool tiny = width() < 560;
-    m_forward->setVisible(s.tbForward && !tiny);
-    m_up->setVisible(s.tbUp);
-    m_search->setVisible(s.tbSearch);
-    m_viewBtn->setVisible(s.tbView);
-    m_split->setVisible(s.tbSplit && !tiny);
-    m_sideBtn->setVisible(s.tbSidebar);
-    for (QFrame *g : {m_navGroup, m_actionGroup}) {
+    m_forward->setVisible(s.toolbarLayout.contains("forward") && !tiny);
+    m_split->setVisible(s.toolbarLayout.contains("split") && !tiny);
+    for (QFrame *g : m_groups) {
         g->setObjectName(grouped ? "toolGroup" : "");
         g->layout()->setSpacing(grouped ? 0 : 2);
         g->style()->unpolish(g);
@@ -517,17 +555,25 @@ void MainWindow::headerMenu(const QPoint &globalPos)
         a->setChecked(s.toolbarIconSize == i);
     }
     m.addSection("Botones");
-    struct T { const char *name; bool *field; };
-    for (T t : {T{"Adelante", &s.tbForward}, T{"Carpeta superior", &s.tbUp}, T{"Buscar", &s.tbSearch},
-                T{"Modo de vista", &s.tbView}, T{"Vista dividida", &s.tbSplit}, T{"Barra lateral", &s.tbSidebar}}) {
-        bool *f = t.field;
-        QAction *a = m.addAction(QString::fromUtf8(t.name), this, [f] {
-            *f = !*f;
+    struct T { const char *item, *name; };
+    for (T t : {T{"back", "Atrás"}, T{"forward", "Adelante"}, T{"up", "Carpeta superior"}, T{"search", "Buscar"},
+                T{"view", "Modo de vista"}, T{"split", "Vista dividida"}, T{"sidebar", "Barra lateral"}}) {
+        const QString item = QString::fromLatin1(t.item);
+        QAction *a = m.addAction(QString::fromUtf8(t.name), this, [item] {
+            QStringList &l = Settings::get().toolbarLayout;
+            const int i = std::max(l.indexOf(item), l.indexOf('-' + item));
+            if (i >= 0) l[i] = l[i].startsWith('-') ? item : '-' + item;   // keeps its place
             Settings::get().changed();
         });
         a->setCheckable(true);
-        a->setChecked(*f);
+        a->setChecked(s.toolbarLayout.contains(item));
     }
+    m.addSeparator();
+    m.addAction(Icons::get().ui("settings"), QString::fromUtf8("Ordenar y agrupar botones…"), this, [this] {
+        SettingsDialog d(this);
+        d.showPage("Barra superior");
+        d.exec();
+    });
     m.exec(globalPos);
 }
 
@@ -556,9 +602,15 @@ bool MainWindow::eventFilter(QObject *o, QEvent *e)
 void MainWindow::applySettings()
 {
     static int lastStyle = -1, lastCounts = -1;
-    static QString lastTheme = "\x01";
+    static QString lastTheme = "\x01", lastAccent;
     const Settings &s = Settings::get();
-    const bool iconsChanged = lastStyle != s.iconStyle || lastTheme != s.iconTheme;
+    const bool accentChanged = lastAccent != s.accentColor;
+    if (accentChanged) {   // recolour everything: palette, style sheet, glyph icons
+        lastAccent = s.accentColor;
+        Theme::get().load();
+        Theme::get().applyToApp();
+    }
+    const bool iconsChanged = lastStyle != s.iconStyle || lastTheme != s.iconTheme || accentChanged;
     if (iconsChanged) Icons::get().reload();
     for (Pane *p : findChildren<Pane *>()) {
         p->applySettings();
@@ -573,6 +625,7 @@ void MainWindow::applySettings()
     const QList<int> sidebar = {s.showPlaces, s.showBookmarks, s.showDevices};
     if (iconsChanged || sidebar != lastSidebar) m_sidebar->reload();
     lastSidebar = sidebar;
+    m_sidebar->applySizes();
     layoutSidebar();
     applyHeaderStyle();
     syncHeader();
@@ -690,6 +743,9 @@ void MainWindow::addShortcuts()
     sc(QKeySequence::Cut, [this] { pane()->cutSelection(); });
     sc(QKeySequence::Paste, [this] { pane()->paste(); });
     sc(QKeySequence("Ctrl+A"), [this] { pane()->selectAll(); });
+    sc(QKeySequence::Undo, [] { Undo::get().undo(); });
+    sc(QKeySequence("Ctrl+Shift+Z"), [] { Undo::get().redo(); });
+    sc(QKeySequence("Ctrl+Y"), [] { Undo::get().redo(); });
     sc(QKeySequence("Ctrl+Shift+I"), [this] { pane()->invertSelection(); });
     sc(QKeySequence("Ctrl+Shift+N"), [this] { pane()->newFolder(); });
     sc(QKeySequence("Ctrl+Shift+C"), [this] { pane()->copyPath(); });
@@ -717,7 +773,9 @@ void MainWindow::addShortcuts()
         Settings::get().sidebarVisible = !Settings::get().sidebarVisible;
         Settings::get().changed();
     });
-    sc(QKeySequence("Ctrl+D"), [this] { m_sidebar->addBookmark(pane()->path()); });
+    sc(QKeySequence("Ctrl+D"), [this] {
+        if (!pane()->isVirtual()) m_sidebar->addBookmark(pane()->path());
+    });
     sc(QKeySequence("Ctrl+,"), [this] { SettingsDialog(this).exec(); });
     sc(QKeySequence("Ctrl+Q"), [] { qApp->closeAllWindows(); });
 }
@@ -765,6 +823,7 @@ void MainWindow::showShortcuts()
         {"Ctrl+H", "Mostrar ocultos"}, {"F2", "Renombrar (en lote si hay varios)"},
         {"Supr / Mayús+Supr", "Papelera / eliminar definitivamente"}, {"Ctrl+C / X / V", "Copiar / cortar / pegar"},
         {"Ctrl+Mayús+N", "Nueva carpeta"}, {"Alt+Intro", "Propiedades"}, {"F4", "Terminal aquí"},
+        {"Ctrl+Z / Ctrl+Mayús+Z", "Deshacer / rehacer"},
         {"Ctrl+D", "Añadir a marcadores"}, {"Ctrl+,", "Ajustes"}, {"Arrastrar + Ctrl / Mayús / ambos", "Copiar / mover / enlazar"},
     };
     QString html = "<table cellspacing=6>";

@@ -37,6 +37,7 @@ public:
     void zoom(int delta);
     void setActive(bool a);
     bool isTrash() const;
+    bool isVirtual() const;   // Recientes or Destacados
     QStringList selectedPaths() const;
     void applySettings();
     void focusView();
@@ -99,6 +100,7 @@ private:
     void setupView(QAbstractItemView *v);
     void applyIconSizes();
     void adjustColumns(QTreeView *t);
+    bool recursiveSearch() const;
 
     QString m_path;
     QStringList m_back, m_forward;

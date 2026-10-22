@@ -23,12 +23,15 @@ add_executable(luna
   src/thumbs.h src/thumbs.cpp
   src/apps.h src/apps.cpp
   src/fileops.h src/fileops.cpp
+  src/undo.h src/undo.cpp
+  src/places.h src/places.cpp
   src/pathbar.h src/pathbar.cpp
   src/remote.h src/remote.cpp
   src/sidebar.h src/sidebar.cpp
   src/pane.h src/pane.cpp
   src/properties.h src/properties.cpp
   src/settingsdialog.h src/settingsdialog.cpp
+  src/smoothscroll.h src/smoothscroll.cpp
   src/mainwindow.h src/mainwindow.cpp
   data/luna.qrc
 )

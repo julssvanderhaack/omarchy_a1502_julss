@@ -4,6 +4,7 @@
 #include "settings.h"
 #include "theme.h"
 #include "thumbs.h"
+#include "undo.h"
 #include <QCollator>
 #include <QCoreApplication>
 #include <QFont>
@@ -521,6 +522,7 @@ void FsModel::setRoot(const QString &path)
     m_byPath.clear();
     m_dirty.clear();
     m_root = std::make_unique<Node>();
+    m_virtual = false;
     m_rootPath = QDir::cleanPath(path);
     m_root->fullPath = m_rootPath;
     m_root->e.isDir = true;
@@ -797,21 +799,7 @@ void FsModel::searchWorker(QPointer<FsModel> self, std::shared_ptr<std::atomic<b
         if (!app) return;
         QMetaObject::invokeMethod(app, [self, b = std::move(b), gen, finished, total]() mutable {
             if (!self || gen != self->m_gen) return;
-            if (!b.empty()) {
-                Node *r = self->m_root.get();
-                int first = int(r->kids.size());
-                self->beginInsertRows({}, first, first + int(b.size()) - 1);
-                for (auto &p : b) {
-                    auto k = std::make_unique<Node>();
-                    k->e = std::move(p.second);
-                    k->fullPath = p.first;
-                    k->parent = r;
-                    k->rowHint = int(r->kids.size());
-                    self->m_byPath.insert(p.first, k.get());
-                    r->kids.push_back(std::move(k));
-                }
-                self->endInsertRows();
-            }
+            self->insertFlat(b);
             emit self->searchProgress(total, finished);
         }, Qt::QueuedConnection);
     };
@@ -871,6 +859,63 @@ void FsModel::searchWorker(QPointer<FsModel> self, std::shared_ptr<std::atomic<b
                 qlonglong(ru.ru_utime.tv_sec * 1000 + ru.ru_utime.tv_usec / 1000 + ru.ru_stime.tv_sec * 1000 + ru.ru_stime.tv_usec / 1000),
                 long(ru.ru_utime.tv_sec * 1000 + ru.ru_utime.tv_usec / 1000), long(ru.ru_stime.tv_sec * 1000 + ru.ru_stime.tv_usec / 1000));
     }
+}
+
+void FsModel::insertFlat(std::vector<std::pair<QString, FileEntry>> &items)
+{
+    if (items.empty()) return;
+    Node *r = m_root.get();
+    const int first = int(r->kids.size());
+    beginInsertRows({}, first, first + int(items.size()) - 1);
+    for (auto &p : items) {
+        auto k = std::make_unique<Node>();
+        k->e = std::move(p.second);
+        k->fullPath = p.first;
+        k->parent = r;
+        k->rowHint = int(r->kids.size());
+        m_byPath.insert(p.first, k.get());
+        r->kids.push_back(std::move(k));
+    }
+    endInsertRows();
+}
+
+void FsModel::setPaths(const QString &root, const QStringList &paths)
+{
+    stopSearch();
+    beginResetModel();
+    if (!m_watched.isEmpty()) m_watcher.removePaths(QStringList(m_watched.begin(), m_watched.end()));
+    m_watched.clear();
+    m_byPath.clear();
+    m_dirty.clear();
+    m_rootPath = root;
+    m_root = std::make_unique<Node>();
+    m_root->fullPath = root;
+    m_root->loaded = true;
+    ++m_gen;
+    m_error.clear();
+    m_searchMode = true;
+    m_virtual = true;
+    endResetModel();
+    m_loading = true;
+    emit loadingChanged(true);
+    const quint64 gen = m_gen;
+    QPointer<FsModel> self(this);
+    listPool().start([self, paths, gen] {
+        std::vector<std::pair<QString, FileEntry>> items;
+        for (const QString &p : paths) {
+            bool ok = false;
+            FileEntry e = statPath(p, &ok);
+            if (ok) items.push_back({p, std::move(e)});
+        }
+        if (auto *app = QCoreApplication::instance())
+            QMetaObject::invokeMethod(app, [self, gen, items = std::move(items)]() mutable {
+                if (!self || gen != self->m_gen) return;
+                self->insertFlat(items);
+                self->m_loading = false;
+                emit self->loadingChanged(false);
+                emit self->rootLoaded();
+            }, Qt::QueuedConnection);
+    });
 }
 
 void FsModel::startSearch(const QString &pattern)
@@ -1049,6 +1094,7 @@ bool FsModel::setData(const QModelIndex &idx, const QVariant &value, int role)
         emit errorOccurred(QString::fromUtf8("No se pudo renombrar: %1").arg(QString::fromLocal8Bit(strerror(errno))));
         return false;
     }
+    Undo::get().record(Undo::Rename, {{oldPath, newPath}});
     unindexNode(n);
     n->e.name = newName;
     n->key.reset();
@@ -1079,7 +1125,7 @@ QVariant FsModel::headerData(int section, Qt::Orientation o, int role) const
 
 Qt::ItemFlags FsModel::flags(const QModelIndex &idx) const
 {
-    if (!idx.isValid()) return Qt::ItemIsDropEnabled;
+    if (!idx.isValid()) return m_virtual ? Qt::NoItemFlags : Qt::ItemIsDropEnabled;
     Qt::ItemFlags f = Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled;
     const FileEntry &e = nodeOf(idx)->e;
     if (idx.column() == Name) f |= Qt::ItemIsEditable;

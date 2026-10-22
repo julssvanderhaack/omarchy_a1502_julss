@@ -1,5 +1,7 @@
 #include "settings.h"
+#include <algorithm>
 #include <QCoreApplication>
+#include <QSet>
 #include <QSettings>
 #include <QTimer>
 
@@ -19,6 +21,33 @@ int Settings::listIconSizeFor(int zoom)
 {
     static const int sizes[] = {16, 22, 32, 48};
     return sizes[std::clamp(zoom, 0, 3)];
+}
+
+QStringList Settings::toolbarItems()
+{
+    return {"back", "forward", "up", "path", "search", "view", "split", "sidebar", "menu"};
+}
+
+QStringList Settings::normalizeToolbar(const QStringList &layout)
+{
+    const QStringList items = toolbarItems();
+    QStringList out;
+    QSet<QString> seen;
+    for (QString t : layout) {
+        if (t == "|") {
+            if (!out.isEmpty() && out.last() != "|") out << t;
+            continue;
+        }
+        const QString name = t.startsWith('-') ? t.mid(1) : t;
+        if (!items.contains(name) || seen.contains(name)) continue;
+        seen.insert(name);
+        if (name == "path" || name == "menu") t = name;   // never hidden
+        out << t;
+    }
+    for (const QString &name : items)   // anything missing goes at the end, hidden
+        if (!seen.contains(name)) out << (name == "path" || name == "menu" ? name : '-' + name);
+    while (!out.isEmpty() && out.last() == "|") out.removeLast();
+    return out;
 }
 
 void Settings::changed()
@@ -65,6 +94,9 @@ void Settings::load()
     confirmTrash = q.value("behavior/confirmTrash", confirmTrash).toBool();
     confirmDelete = q.value("behavior/confirmDelete", confirmDelete).toBool();
     middleClickNewTab = q.value("behavior/middleClickNewTab", middleClickNewTab).toBool();
+    smoothScroll = q.value("behavior/smoothScroll", smoothScroll).toBool();
+    wheelSpeed = std::clamp(q.value("behavior/wheelSpeed", wheelSpeed).toInt(), 25, 500);
+    touchSpeed = std::clamp(q.value("behavior/touchSpeed", touchSpeed).toInt(), 25, 500);
     restoreSession = q.value("behavior/restoreSession", restoreSession).toBool();
     typeToSearch = q.value("behavior/typeToSearch", typeToSearch).toBool();
     searchRecursiveDefault = q.value("behavior/searchRecursive", searchRecursiveDefault).toBool();
@@ -83,6 +115,18 @@ void Settings::load()
     tbView = q.value("toolbar/view", tbView).toBool();
     tbSplit = q.value("toolbar/split", tbSplit).toBool();
     tbSidebar = q.value("toolbar/sidebar", tbSidebar).toBool();
+    toolbarLayout = q.value("toolbar/layout").toStringList();
+    if (toolbarLayout.isEmpty()) {   // from the older per-button switches
+        auto item = [](const char *name, bool on) { return (on ? QString() : QStringLiteral("-")) + name; };
+        toolbarLayout = {"back", item("forward", tbForward), item("up", tbUp), "|", "path", "|", item("search", tbSearch),
+                         item("view", tbView), item("split", tbSplit), item("sidebar", tbSidebar), "menu"};
+    }
+    toolbarLayout = normalizeToolbar(toolbarLayout);
+    accentColor = q.value("look/accent", accentColor).toString();
+    viewFontPt = q.value("look/viewFontPt", viewFontPt).toDouble();
+    sidebarIconSize = q.value("sidebar/iconSize", sidebarIconSize).toInt();
+    sidebarFontPt = q.value("sidebar/fontPt", sidebarFontPt).toDouble();
+    sidebarSpacing = q.value("sidebar/spacing", sidebarSpacing).toInt();
     sessionTabs = q.value("session/tabs").toStringList();
     startSplit = q.value("session/split", startSplit).toBool();
 }
@@ -113,6 +157,10 @@ void Settings::save() const
     q.setValue("behavior/confirmTrash", confirmTrash);
     q.setValue("behavior/confirmDelete", confirmDelete);
     q.setValue("behavior/middleClickNewTab", middleClickNewTab);
+    q.setValue("behavior/smoothScroll", smoothScroll);
+    q.setValue("behavior/wheelSpeed", wheelSpeed);
+    q.setValue("behavior/touchSpeed", touchSpeed);
+    q.remove("behavior/scrollSpeed");   // short-lived 3-step setting
     q.setValue("behavior/restoreSession", restoreSession);
     q.setValue("behavior/typeToSearch", typeToSearch);
     q.setValue("behavior/searchRecursive", searchRecursiveDefault);
@@ -131,6 +179,12 @@ void Settings::save() const
     q.setValue("toolbar/view", tbView);
     q.setValue("toolbar/split", tbSplit);
     q.setValue("toolbar/sidebar", tbSidebar);
+    q.setValue("toolbar/layout", toolbarLayout);
+    q.setValue("look/accent", accentColor);
+    q.setValue("look/viewFontPt", viewFontPt);
+    q.setValue("sidebar/iconSize", sidebarIconSize);
+    q.setValue("sidebar/fontPt", sidebarFontPt);
+    q.setValue("sidebar/spacing", sidebarSpacing);
     q.setValue("session/tabs", sessionTabs);
     q.setValue("session/split", startSplit);
 }

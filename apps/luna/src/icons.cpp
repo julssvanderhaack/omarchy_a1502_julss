@@ -217,7 +217,7 @@ QIcon Icons::place(const QString &kind)
             {"videos", {0xF03D, 1}}, {"trash", {0xF1F8, 1}}, {"trash-full", {0xF1F8, 1}},
             {"drive", {0xF0A0, 1}}, {"usb", {0xF287, 1}}, {"root", {0xF0A0, 1}},
             {"bookmark", {0xF07B, 1}}, {"projects", {0xF121, 1}}, {"dropbox", {0xF16B, 1}},
-            {"network", {0xF0E8, 1}}, {"recent", {0xF017, 1}}, {"bookmark-add", {0xF067, 9}},
+            {"network", {0xF0E8, 1}}, {"recent", {0xF017, 1}}, {"starred", {0xF005, 4}}, {"bookmark-add", {0xF067, 9}},
         };
         GlyphStyle s = g.value(kind, {0xF07B, 1});
         icon = glyph(s.cp, paletteColor(s.color));
@@ -240,6 +240,7 @@ QIcon Icons::place(const QString &kind)
             {"dropbox", {"folder-dropbox", "dropbox", "folder"}},
             {"network", {"network-workgroup", "folder-remote"}},
             {"recent", {"document-open-recent", "folder-recent"}},
+            {"starred", {"starred", "emblem-favorite", "folder"}},
         };
         icon = themed(n.value(kind, {"folder"}));
     }
@@ -395,6 +396,8 @@ QIcon Icons::sidebar(const QString &kind)
         {"usb", {{"drive-removable-media-symbolic", "media-removable-symbolic"}, 0xF0553}},
         {"network", {{"network-server-symbolic", "folder-remote-symbolic"}, 0xF048D}},
         {"add", {{"list-add-symbolic"}, 0xF0415}},
+        {"recent", {{"document-open-recent-symbolic", "history-symbolic"}, 0xF02DA}},
+        {"starred", {{"starred-symbolic", "non-starred-symbolic"}, 0xF04CE}},
     };
     auto m = map.value(kind, map.value("folder"));
     const QColor c = Theme::get().fg;

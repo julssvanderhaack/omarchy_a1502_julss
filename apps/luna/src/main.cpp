@@ -7,6 +7,7 @@
 #include "properties.h"
 #include "remote.h"
 #include "settingsdialog.h"
+#include "smoothscroll.h"
 #include <QElapsedTimer>
 #include <QTimer>
 #include "settings.h"
@@ -24,6 +25,12 @@
 #include <QMouseEvent>
 #include <QTabWidget>
 #include <QUrl>
+#include <QStackedWidget>
+#include <memory>
+#include <functional>
+#include <QWheelEvent>
+#include <QScrollBar>
+#include <QColumnView>
 
 namespace {
 // Fusion without the stock icons on dialog buttons (red/green blobs).
@@ -52,30 +59,13 @@ int main(int argc, char **argv)
     // holds a screenful at most, so scrolling a photo folder rescaled them.
     QPixmapCache::setCacheLimit(64 * 1024);
 
+    Settings::get().load();   // first: the theme takes the accent colour from it
     Theme &th = Theme::get();
     th.load();
-    Settings::get().load();
     Icons::get().reload();
 
     app.setStyle(new LunaStyle(QStyleFactory::create("Fusion")));
-    QPalette pal;
-    pal.setColor(QPalette::Window, th.bgDark);
-    pal.setColor(QPalette::WindowText, th.fg);
-    pal.setColor(QPalette::Base, th.bg);
-    pal.setColor(QPalette::AlternateBase, th.bgLight);
-    pal.setColor(QPalette::Text, th.fg);
-    pal.setColor(QPalette::Button, th.bgLight);
-    pal.setColor(QPalette::ButtonText, th.fg);
-    pal.setColor(QPalette::Highlight, th.accent);
-    pal.setColor(QPalette::HighlightedText, th.bg);
-    pal.setColor(QPalette::PlaceholderText, th.fgDim);
-    pal.setColor(QPalette::ToolTipBase, th.bgLight);
-    pal.setColor(QPalette::ToolTipText, th.fg);
-    pal.setColor(QPalette::Link, th.accent);
-    pal.setColor(QPalette::Disabled, QPalette::WindowText, th.fgDim);
-    pal.setColor(QPalette::Disabled, QPalette::ButtonText, th.fgDim);
-    app.setPalette(pal);
-    app.setStyleSheet(th.styleSheet());
+    th.applyToApp();
 
     QStringList paths;
     for (int i = 1; i < argc; ++i) {
@@ -97,6 +87,7 @@ int main(int argc, char **argv)
             return false;
         }
     };
+    app.installEventFilter(new SmoothScroll(&app));   // before any object filter (Ctrl+wheel zoom passes through)
     if (qEnvironmentVariableIsSet("LUNA_DEBUG_META")) app.installEventFilter(new MetaCallLogger);
     auto *w = new MainWindow(paths);
     w->setAttribute(Qt::WA_DeleteOnClose);
@@ -214,6 +205,59 @@ int main(int argc, char **argv)
         QTimer::singleShot(6500, w, [=] { grabMenu("menu-fondo-lista"); clickAt(false); });
         QTimer::singleShot(8000, w, [=] { qApp->quit(); });
     }
+    // Wheel animation check: LUNA_SCROLLTEST=1 luna <big folder> prints the
+    // scroll bar every ~20 ms after one notch, a quick burst of 4 and a
+    // touchpad swipe of 5 x 10 px.
+    if (qEnvironmentVariableIsSet("LUNA_SCROLLTEST")) {
+        auto notch = [](QAbstractScrollArea *a) {
+            QWidget *vp = a->viewport();
+            const QPointF p(vp->width() / 2, vp->height() / 2);
+            QWheelEvent ev(p, vp->mapToGlobal(p), {}, {0, -120}, Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+            QApplication::sendEvent(vp, &ev);
+        };
+        auto swipe = [](QAbstractScrollArea *a) {   // touchpad: pixels plus the angle Qt derives from them
+            QWidget *vp = a->viewport();
+            const QPointF p(vp->width() / 2, vp->height() / 2);
+            QWheelEvent ev(p, vp->mapToGlobal(p), {0, -10}, {0, -80}, Qt::NoButton, Qt::NoModifier, Qt::ScrollUpdate, false);
+            QApplication::sendEvent(vp, &ev);
+        };
+        auto run = std::make_shared<std::function<void(int)>>();
+        *run = [=](int mode) {
+            if (mode > int(ViewMode::Columns)) { qApp->quit(); return; }
+            w->pane()->setViewMode(ViewMode(mode));
+            QTimer::singleShot(600, w, [=] {
+                auto *v = qobject_cast<QAbstractItemView *>(w->pane()->findChild<QStackedWidget *>()->currentWidget());
+                if (auto *cv = qobject_cast<QColumnView *>(v))
+                    for (auto *c : cv->findChildren<QAbstractItemView *>()) if (c->isVisible()) v = c;
+                QScrollBar *bar = v->verticalScrollBar()->maximum() > 0 ? v->verticalScrollBar() : v->horizontalScrollBar();
+                auto samples = std::make_shared<QStringList>();
+                auto timer = new QElapsedTimer;
+                timer->start();
+                QObject::connect(bar, &QScrollBar::valueChanged, w, [=](int val) { *samples << QString("%1ms=%2").arg(timer->elapsed()).arg(val); });
+                *samples << QString("start=%1 max=%2 step=%3").arg(bar->value()).arg(bar->maximum()).arg(bar->singleStep());
+                notch(v);
+                QTimer::singleShot(300, w, [=] {
+                    *samples << "| burst";
+                    for (int i = 0; i < 4; ++i) QTimer::singleShot(i * 40, w, [=] { notch(v); });
+                });
+                QTimer::singleShot(800, w, [=] {
+                    const int before = bar->value() == bar->maximum() ? 0 : bar->value();
+                    bar->setValue(before);
+                    for (int i = 0; i < 5; ++i) swipe(v);
+                    *samples << QString("| touchpad 5x10px: %1 -> %2").arg(before).arg(bar->value());
+                });
+                QTimer::singleShot(900, w, [=] {
+                    QObject::disconnect(bar, &QScrollBar::valueChanged, w, nullptr);
+                    printf("%s (%s): %lld cambios\n  %s\n", v->metaObject()->className(), qPrintable(QString::number(mode)),
+                           qlonglong(samples->size()), qPrintable(samples->join(' ')));
+                    fflush(stdout);
+                    delete timer;
+                    (*run)(mode + 1);
+                });
+            });
+        };
+        QTimer::singleShot(1500, w, [=] { (*run)(0); });
+    }
     // Scripted screenshots for development: LUNA_SHOTS=<dir> luna <folder> [photo]
     if (qEnvironmentVariableIsSet("LUNA_SHOT_SIZE")) {
         const QStringList wh = qEnvironmentVariable("LUNA_SHOT_SIZE").split('x');
@@ -259,6 +303,8 @@ int main(int argc, char **argv)
             s->show();
             QTimer::singleShot(500, s, [=] {
                 shot(s, "9-ajustes");
+                s->showPage("Comportamiento");
+                shot(s, "9b-comportamiento");
                 s->close();
                 auto *c = new ConnectDialog(w);
                 c->show();

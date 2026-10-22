@@ -1,8 +1,11 @@
 #include "theme.h"
+#include "settings.h"
+#include <QApplication>
 #include <QDir>
 #include <QFile>
 #include <QFontDatabase>
 #include <QHash>
+#include <QPalette>
 #include <QRegularExpression>
 #include <QTextStream>
 
@@ -52,6 +55,7 @@ void Theme::load()
     blue = col("blue", "#7aa2f7");
     magenta = col("magenta", "#bb9af7");
     orange = col("orange", "#ff9e64");
+    if (const QColor own(Settings::get().accentColor); own.isValid()) accent = own;   // the user's choice wins
     dark = bg.lightness() < 128;
 
     mono = QFontDatabase::systemFont(QFontDatabase::FixedFont).family();
@@ -61,6 +65,28 @@ void Theme::load()
             nerd = f;
             if (f.contains("Mono")) break;
         }
+}
+
+void Theme::applyToApp() const
+{
+    QPalette pal;
+    pal.setColor(QPalette::Window, bgDark);
+    pal.setColor(QPalette::WindowText, fg);
+    pal.setColor(QPalette::Base, bg);
+    pal.setColor(QPalette::AlternateBase, bgLight);
+    pal.setColor(QPalette::Text, fg);
+    pal.setColor(QPalette::Button, bgLight);
+    pal.setColor(QPalette::ButtonText, fg);
+    pal.setColor(QPalette::Highlight, accent);
+    pal.setColor(QPalette::HighlightedText, bg);
+    pal.setColor(QPalette::PlaceholderText, fgDim);
+    pal.setColor(QPalette::ToolTipBase, bgLight);
+    pal.setColor(QPalette::ToolTipText, fg);
+    pal.setColor(QPalette::Link, accent);
+    pal.setColor(QPalette::Disabled, QPalette::WindowText, fgDim);
+    pal.setColor(QPalette::Disabled, QPalette::ButtonText, fgDim);
+    QApplication::setPalette(pal);
+    qApp->setStyleSheet(styleSheet());
 }
 
 QString Theme::styleSheet() const
