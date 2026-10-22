@@ -1,13 +1,29 @@
 #!/bin/bash
 
-# After resume, make sure the wifi comes back. The check runs as a detached
-# transient unit so it never delays waking up; logs: journalctl -u julss-wifi-resume-check
+# The BCM43602 firmware often comes back hung from S3 (brcmf_msgbuf_query_dcmd
+# timeouts) and only a card reset revives it. So don't suspend with it loaded:
+# unload brcmfmac before sleeping, PCI-reset the card and load it fresh after.
+# brcmfmac_wcc holds a reference on brcmfmac, so it has to go first.
+#
+# After resume, a check still makes sure the wifi comes back. It runs as a
+# detached transient unit so it never delays waking up;
+# logs: journalctl -u julss-wifi-resume-check
 
 unit=julss-wifi-resume-check
+pcidev=/sys/bus/pci/devices/0000:03:00.0
 
 # Stop a check still running from a previous resume (also before suspending).
 systemctl stop "$unit.service" >/dev/null 2>&1
 
-if [[ $1 == "post" ]]; then
-  systemd-run --no-block --collect --unit="$unit" /usr/local/bin/julss-wifi-resume-check
-fi
+case $1 in
+  pre)
+    timeout 20 modprobe -r brcmfmac_wcc brcmfmac
+    ;;
+  post)
+    if ! lsmod | grep -q '^brcmfmac '; then
+      [[ -w $pcidev/reset ]] && echo 1 >"$pcidev/reset"
+      modprobe brcmfmac
+    fi
+    systemd-run --no-block --collect --unit="$unit" /usr/local/bin/julss-wifi-resume-check
+    ;;
+esac

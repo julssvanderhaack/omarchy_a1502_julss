@@ -90,8 +90,11 @@ yay -S blesh-git
 
 ## Wifi al despertar (BCM43602)
 
-Al volver de la suspensión, `brcmfmac` recarga el firmware y a veces el primer
-intento de conexión caduca. `julss-wifi-resume-check` espera 30 s; si la wifi no
+El firmware del BCM43602 a menudo vuelve colgado de la suspensión (S3), así que
+el hook `julss-wifi-resume` descarga `brcmfmac` (y `brcmfmac_wcc`) antes de
+suspender y, al despertar, hace un reset PCI de la tarjeta y lo carga limpio.
+
+Además, al volver a veces el primer intento de conexión caduca. `julss-wifi-resume-check` espera 30 s; si la wifi no
 ha vuelto (y está encendida y hay una red guardada al alcance), reinicia la radio
 y, si aun así no conecta, resetea la tarjeta: descarga el driver (primero
 `brcmfmac_wcc`, que lo mantiene «en uso»), hace un reset PCI del dispositivo y lo
