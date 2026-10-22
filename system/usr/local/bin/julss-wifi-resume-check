@@ -2,37 +2,59 @@
 
 # On resume brcmfmac reloads the BCM43602 firmware and the first association
 # sometimes times out. NetworkManager usually recovers on its own retry; if it
-# hasn't after a grace period, bounce the radio, and as a last resort reload
-# the driver. Does nothing if wifi is switched off or no saved network is in range.
+# hasn't after a grace period, bounce the radio, and as a last resort reset the
+# card: unload the driver, PCI-reset the device and load it again. Does nothing
+# if wifi is switched off or no saved network is in range.
+#
+# Sometimes the firmware itself is hung after resume (kernel log full of
+# "brcmf_msgbuf_query_dcmd: Timeout" / "Failed to reserve space in commonring").
+# Bouncing the radio can't fix that, so it goes straight to the card reset.
 #
 # --force (the wifi panel's restart button): skip the grace period and the
-# in-range check and go straight to bouncing the radio, then the driver.
+# in-range check and go straight to bouncing the radio, then the card reset.
 
 set -u
 
 IFACE=wlp3s0
+PCIDEV=/sys/bus/pci/devices/0000:03:00.0
 GRACE=30
 FORCE=0
 [[ ${1:-} == --force ]] && FORCE=1
+START=$(date +%s)
+
+# One run at a time (resume check and restart button can overlap); a run that
+# waited for another one is done if that one already brought the wifi back.
+exec 9>/run/julss-wifi-resume-check.lock
+if ! flock -n 9; then
+  echo "Another check is running, waiting for it"
+  flock -w 300 9 || { echo "Gave up waiting"; exit 1; }
+  WAITED=1
+fi
 
 connected() {
-  [[ $(nmcli -g GENERAL.STATE device show "$IFACE" 2>/dev/null) == 100* ]]
+  [[ $(timeout 10 nmcli -g GENERAL.STATE device show "$IFACE" 2>/dev/null) == 100* ]]
 }
 
 wait_connected() {
   local i
-  for ((i = 0; i < GRACE; i++)); do
+  for ((i = 0; i < ${1:-$GRACE}; i++)); do
     connected && return 0
     sleep 1
   done
   return 1
 }
 
+firmware_hung() {
+  journalctl -k -b -q --since "@$((START - 60))" \
+    --grep 'brcmf_msgbuf_query_dcmd: Timeout|Failed to reserve space in commonring' \
+    2>/dev/null | grep -q .
+}
+
 # A scan that sees no networks at all is the broken-after-resume state itself
 # (the radio is up but deaf), not an empty neighbourhood, so it counts as yes.
 known_network_in_range() {
-  local name ssid visible
-  visible=$(nmcli -g SSID device wifi list ifname "$IFACE" --rescan yes 2>/dev/null)
+  local name type ssid visible
+  visible=$(timeout 30 nmcli -g SSID device wifi list ifname "$IFACE" --rescan yes 2>/dev/null)
   [[ -z ${visible//[[:space:]]/} ]] && return 0
   while IFS=: read -r name type; do
     [[ $type == 802-11-wireless ]] || continue
@@ -42,8 +64,37 @@ known_network_in_range() {
   return 1
 }
 
+restart_radio() {
+  timeout 30 nmcli radio wifi off
+  sleep 2
+  timeout 30 nmcli radio wifi on
+}
+
+# brcmfmac_wcc (vendor module) holds a reference on brcmfmac, so a plain
+# `modprobe -r brcmfmac` fails with "Module brcmfmac is in use". Reloading
+# alone also leaves a hung firmware hung, hence the PCI reset in between.
+reset_card() {
+  if timeout 90 modprobe -r brcmfmac_wcc brcmfmac; then
+    [[ -w $PCIDEV/reset ]] && echo 1 >"$PCIDEV/reset"
+    sleep 1
+    modprobe brcmfmac
+  else
+    # Driver wouldn't unload: drop the device from the bus and rediscover it,
+    # which also re-probes the driver from scratch.
+    echo "Driver unload failed, removing and rescanning the PCI device"
+    echo 1 >"$PCIDEV/remove"
+    sleep 2
+    echo 1 >/sys/bus/pci/rescan
+  fi
+}
+
+if [[ -n ${WAITED:-} ]] && connected; then
+  echo "Wifi already reconnected by the other check"
+  exit 0
+fi
+
 if (( FORCE )); then
-  echo "Restart requested, restarting the wifi radio"
+  echo "Restart requested"
 else
   if wait_connected; then
     echo "Wifi reconnected on its own"
@@ -55,25 +106,30 @@ else
     exit 0
   fi
 
-  if ! known_network_in_range; then
+  if ! firmware_hung && ! known_network_in_range; then
     echo "No saved network in range, nothing to do"
     exit 0
   fi
 
-  echo "Not connected after ${GRACE}s, restarting the wifi radio"
-fi
-nmcli radio wifi off
-sleep 2
-nmcli radio wifi on
-if wait_connected; then
-  echo "Wifi reconnected after restarting the radio"
-  exit 0
+  echo "Not connected after ${GRACE}s"
 fi
 
-echo "Still not connected, reloading brcmfmac"
-modprobe -r brcmfmac && modprobe brcmfmac
-if wait_connected; then
-  echo "Wifi reconnected after reloading the driver"
+if firmware_hung; then
+  echo "Firmware is not responding, skipping the radio restart"
+else
+  echo "Restarting the wifi radio"
+  restart_radio
+  if wait_connected; then
+    echo "Wifi reconnected after restarting the radio"
+    exit 0
+  fi
+fi
+
+echo "Resetting the wifi card (driver unload, PCI reset, reload)"
+reset_card
+# Firmware load + association took ~12 s at boot; leave room for it.
+if wait_connected 60; then
+  echo "Wifi reconnected after resetting the card"
   exit 0
 fi
 

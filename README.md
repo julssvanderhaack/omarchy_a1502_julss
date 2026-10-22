@@ -93,13 +93,19 @@ yay -S blesh-git
 Al volver de la suspensión, `brcmfmac` recarga el firmware y a veces el primer
 intento de conexión caduca. `julss-wifi-resume-check` espera 30 s; si la wifi no
 ha vuelto (y está encendida y hay una red guardada al alcance), reinicia la radio
-y, si aun así no conecta, recarga el driver. Lo instala `install.sh` (parte de
+y, si aun así no conecta, resetea la tarjeta: descarga el driver (primero
+`brcmfmac_wcc`, que lo mantiene «en uso»), hace un reset PCI del dispositivo y lo
+vuelve a cargar; si el driver no se deja descargar, quita el dispositivo del bus
+PCI y lo redescubre. Si el log del kernel muestra el firmware colgado
+(`brcmf_msgbuf_query_dcmd: Timeout`, `Failed to reserve space in commonring`) se
+salta el reinicio de radio, que en ese caso no sirve. Lo instala `install.sh` (parte de
 ficheros de sistema). Si el escaneo no ve ninguna red, lo trata como wifi rota
 (es lo que pasa cuando el driver se queda sordo), no como «no hay redes».
 
 Si aun así no vuelve, el botón ↻ tenue del panel Wi-Fi (`julss.network`, junto
 al QR) lanza `pkexec julss-wifi-resume-check --force`: sin esperar ni
-comprobar, reinicia la radio y, si hace falta, recarga el driver. El resultado
+comprobar, reinicia la radio y, si hace falta, resetea la tarjeta. Si se pulsa
+dos veces, la segunda espera a que acabe la primera. El resultado
 llega como notificación. A mano: `sudo julss-wifi-resume-check --force`.
 
 Registro: `journalctl -u julss-wifi-resume-check`.
