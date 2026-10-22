@@ -85,16 +85,24 @@ backup_and_copy "$REPO_DIR/share/applications/julss-calc.desktop" "$HOME/.local/
 backup_and_copy "$REPO_DIR/share/applications/omacalc.desktop" "$HOME/.local/share/applications/omacalc.desktop"
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 
-# Reproductor de música Sonata (C++/Qt6 + FFmpeg + PipeWire): compila, instala en
-# ~/.local (con su icono, una clave de sol) y lo deja como aplicación por defecto
-# para los archivos de audio
+# Reproductor de música Sonata (C++/Qt6 + FFmpeg + PipeWire), en su propio repo
+# (github.com/julssvanderhaack/sonata): lo clona o actualiza en ~/src/sonata,
+# compila para esta CPU, instala en ~/.local y lo deja como aplicación por
+# defecto para los archivos de audio
+SONATA_DIR="$HOME/src/sonata"
 if omarchy pkg add cmake ffmpeg; then
-  cmake -S "$REPO_DIR/apps/sonata" -B "$REPO_DIR/apps/sonata/build" -DCMAKE_BUILD_TYPE=Release &&
-    cmake --build "$REPO_DIR/apps/sonata/build" -j"$(nproc)" &&
-    cmake --install "$REPO_DIR/apps/sonata/build" --prefix "$HOME/.local" &&
+  if [ -d "$SONATA_DIR/.git" ]; then
+    git -C "$SONATA_DIR" pull --ff-only || true
+  else
+    git clone https://github.com/julssvanderhaack/sonata.git "$SONATA_DIR"
+  fi &&
+    cmake -S "$SONATA_DIR" -B "$SONATA_DIR/build" -DCMAKE_BUILD_TYPE=Release &&
+    cmake --build "$SONATA_DIR/build" -j"$(nproc)" &&
+    cmake --install "$SONATA_DIR/build" --prefix "$HOME/.local" &&
     gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null
   update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-  xdg-mime default sonata.desktop $(grep '^MimeType=' "$REPO_DIR/apps/sonata/data/sonata.desktop" | cut -d= -f2 | tr ';' ' ') 2>/dev/null || true
+  [ -f "$SONATA_DIR/data/sonata.desktop" ] &&
+    xdg-mime default sonata.desktop $(grep '^MimeType=' "$SONATA_DIR/data/sonata.desktop" | cut -d= -f2 | tr ';' ' ') 2>/dev/null || true
 fi
 # Luna, explorador de archivos propio (C++/Qt6): compila e instala en ~/.local.
 # No se pone como explorador predeterminado (Nautilus sigue siéndolo).
