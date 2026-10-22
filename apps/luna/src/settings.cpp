@@ -25,7 +25,7 @@ int Settings::listIconSizeFor(int zoom)
 
 QStringList Settings::toolbarItems()
 {
-    return {"back", "forward", "up", "path", "search", "view", "split", "sidebar", "menu"};
+    return {"back", "forward", "up", "path", "search", "view", "split", "menu"};
 }
 
 QStringList Settings::normalizeToolbar(const QStringList &layout)
@@ -114,12 +114,11 @@ void Settings::load()
     tbSearch = q.value("toolbar/search", tbSearch).toBool();
     tbView = q.value("toolbar/view", tbView).toBool();
     tbSplit = q.value("toolbar/split", tbSplit).toBool();
-    tbSidebar = q.value("toolbar/sidebar", tbSidebar).toBool();
     toolbarLayout = q.value("toolbar/layout").toStringList();
     if (toolbarLayout.isEmpty()) {   // from the older per-button switches
         auto item = [](const char *name, bool on) { return (on ? QString() : QStringLiteral("-")) + name; };
         toolbarLayout = {"back", item("forward", tbForward), item("up", tbUp), "|", "path", "|", item("search", tbSearch),
-                         item("view", tbView), item("split", tbSplit), item("sidebar", tbSidebar), "menu"};
+                         item("view", tbView), item("split", tbSplit), "menu"};
     }
     toolbarLayout = normalizeToolbar(toolbarLayout);
     accentColor = q.value("look/accent", accentColor).toString();
@@ -178,7 +177,7 @@ void Settings::save() const
     q.setValue("toolbar/search", tbSearch);
     q.setValue("toolbar/view", tbView);
     q.setValue("toolbar/split", tbSplit);
-    q.setValue("toolbar/sidebar", tbSidebar);
+    q.remove("toolbar/sidebar");   // the sidebar button lives in the status bar now
     q.setValue("toolbar/layout", toolbarLayout);
     q.setValue("look/accent", accentColor);
     q.setValue("look/viewFontPt", viewFontPt);

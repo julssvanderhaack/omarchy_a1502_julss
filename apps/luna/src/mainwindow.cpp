@@ -226,7 +226,7 @@ MainWindow::MainWindow(const QStringList &paths)
     };
     labelsOnly(menu);
     labelsOnly(m_viewBtn->menu());
-    for (QToolButton *b : {m_back, m_forward, m_up, m_search, m_viewBtn, m_split, m_sideBtn, menuBtn}) b->installEventFilter(this);
+    for (QToolButton *b : {m_back, m_forward, m_up, m_search, m_viewBtn, m_split, menuBtn}) b->installEventFilter(this);
     m_header = header;
     v->addLayout(header);
     rebuildHeader();
@@ -254,6 +254,11 @@ MainWindow::MainWindow(const QStringList &paths)
     v->addWidget(m_jobs);
     setCentralWidget(central);
 
+    // The sidebar toggle always sits in the bottom-left corner.
+    m_sideBtn->setIconSize(QSize(16, 16));
+    m_sideBtn->setFixedSize(24, 22);
+    m_sideBtn->setStyleSheet("padding: 2px;");
+    statusBar()->addWidget(m_sideBtn);
     m_status = new QLabel;
     statusBar()->addWidget(m_status, 1);
     statusBar()->setSizeGripEnabled(false);
@@ -451,7 +456,7 @@ void MainWindow::rebuildHeader()
     if (layout == m_headerLayout) return;
     m_headerLayout = layout;
     const QHash<QString, QWidget *> items = {{"back", m_back}, {"forward", m_forward}, {"up", m_up}, {"path", m_pathbar}, {"search", m_search},
-                                             {"view", m_viewBtn}, {"split", m_split}, {"sidebar", m_sideBtn}, {"menu", m_menuBtn}};
+                                             {"view", m_viewBtn}, {"split", m_split}, {"menu", m_menuBtn}};
     for (QWidget *w : items) {   // park them while the groups are rebuilt
         w->hide();
         w->setParent(this);
@@ -500,7 +505,7 @@ void MainWindow::applyHeaderStyle()
     const bool grouped = style == 2;
     struct B { QToolButton *b; const char *label; };
     const B buttons[] = {{m_back, "Atrás"}, {m_forward, "Adelante"}, {m_up, "Subir"}, {m_search, "Buscar"},
-                         {m_viewBtn, ""}, {m_split, "Dividir"}, {m_sideBtn, "Lateral"}, {m_menuBtn, "Menú"}};
+                         {m_viewBtn, ""}, {m_split, "Dividir"}, {m_menuBtn, "Menú"}};
     for (const B &x : buttons) {
         x.b->setIconSize(QSize(icon, icon));
         x.b->setToolButtonStyle(text ? Qt::ToolButtonTextBesideIcon : Qt::ToolButtonIconOnly);
@@ -557,7 +562,7 @@ void MainWindow::headerMenu(const QPoint &globalPos)
     m.addSection("Botones");
     struct T { const char *item, *name; };
     for (T t : {T{"back", "Atrás"}, T{"forward", "Adelante"}, T{"up", "Carpeta superior"}, T{"search", "Buscar"},
-                T{"view", "Modo de vista"}, T{"split", "Vista dividida"}, T{"sidebar", "Barra lateral"}}) {
+                T{"view", "Modo de vista"}, T{"split", "Vista dividida"}}) {
         const QString item = QString::fromLatin1(t.item);
         QAction *a = m.addAction(QString::fromUtf8(t.name), this, [item] {
             QStringList &l = Settings::get().toolbarLayout;

@@ -95,7 +95,7 @@ QWidget *toolbarEditor()
     static const QHash<QString, Info> info = {
         {"back", {"Atrás", "back"}}, {"forward", {"Adelante", "forward"}}, {"up", {"Carpeta superior", "up"}},
         {"path", {"Barra de ruta", "crumbs"}}, {"search", {"Buscar", "search"}}, {"view", {"Modo de vista", "icons"}},
-        {"split", {"Vista dividida", "split"}}, {"sidebar", {"Barra lateral", "sidebar"}}, {"menu", {"Menú", "menu"}},
+        {"split", {"Vista dividida", "split"}}, {"menu", {"Menú", "menu"}},
     };
     auto *w = new QWidget;
     auto *h = new QHBoxLayout(w);
@@ -198,7 +198,7 @@ QWidget *toolbarEditor()
     });
     buttons->addSpacing(10);
     button("Restablecer", [=] {
-        fill(Settings::normalizeToolbar({"back", "forward", "up", "|", "path", "|", "search", "view", "split", "sidebar", "menu"}));
+        fill(Settings::normalizeToolbar({"back", "forward", "up", "|", "path", "|", "search", "view", "split", "menu"}));
         save();
     });
     buttons->addStretch();
