@@ -31,6 +31,7 @@
 #include <QShortcut>
 #include <QSortFilterProxyModel>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QTextLayout>
 #include <QWheelEvent>
 #include <QSplitter>
@@ -281,6 +282,7 @@ QWidget *MainWindow::buildPlaylistPane()
     table_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     table_->installEventFilter(this);
     table_->viewport()->installEventFilter(this);
+    table_->horizontalHeader()->installEventFilter(this);   // keeps the scrollbar below it
     v->addWidget(table_, 1);
 
     status_ = new QLabel;
@@ -674,6 +676,11 @@ void MainWindow::setExtrasVisible(bool on)
 bool MainWindow::eventFilter(QObject *o, QEvent *e)
 {
     if (o == nowPane_ && e->type() == QEvent::Resize) fitCover();
+    if (table_ && o == table_->horizontalHeader() && e->type() == QEvent::Resize) {
+        // Qt runs the vertical scrollbar beside the column header too; start it at the first song
+        const QString css = QString("QScrollBar:vertical { margin-top: %1px; }").arg(table_->horizontalHeader()->height());
+        if (table_->verticalScrollBar()->styleSheet() != css) table_->verticalScrollBar()->setStyleSheet(css);
+    }
     if (o == title_ && e->type() == QEvent::Resize && static_cast<QResizeEvent *>(e)->size().width() != static_cast<QResizeEvent *>(e)->oldSize().width())
         setTitleText(fullTitle_);
     if (o == volBtn_ && e->type() == QEvent::Wheel) {
