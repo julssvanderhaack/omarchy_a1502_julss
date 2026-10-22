@@ -104,6 +104,8 @@ void Dsp::process(float *buf, unsigned frames)
     if (!lock_.test_and_set(std::memory_order_acquire)) {
         if (dirty_) {
             coef_ = pendingCoef_;
+            for (int b = 0; b < kBands; ++b)   // skipped (0 dB) bands restart clean when raised again
+                if (coef_[b].b0 == 1 && coef_[b].b1 == coef_[b].a1 && coef_[b].b2 == coef_[b].a2) std::memset(z_[b], 0, sizeof z_[b]);
             if (activeBands_ == 0 && pendingActive_) std::memset(z_, 0, sizeof z_);
             activeBands_ = pendingActive_;
             preampLin_ = pendingPreamp_;
@@ -116,6 +118,8 @@ void Dsp::process(float *buf, unsigned frames)
     if (activeBands_) {
         for (int b = 0; b < kBands; ++b) {
             const Coef k = coef_[b];
+            // a 0 dB band is exactly the identity (b0 = 1, b1 = a1, b2 = a2): skip it
+            if (k.b0 == 1 && k.b1 == k.a1 && k.b2 == k.a2) continue;
             for (int c = 0; c < ch; ++c) {
                 double z1 = z_[b][c][0], z2 = z_[b][c][1];
                 float *p = buf + c;

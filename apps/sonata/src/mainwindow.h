@@ -9,6 +9,7 @@
 class QLabel;
 class QLineEdit;
 class QMimeData;
+class QScrollArea;
 class QSortFilterProxyModel;
 class QSplitter;
 class QStackedWidget;
@@ -75,6 +76,8 @@ private:
     Playlist *currentList() const;
     void setExtrasVisible(bool on);
     void fitCover();
+    void updateModeRow();
+    void setTitleText(const QString &text);
     bool dropFiles(const QMimeData *m, int row);   // from the file manager: add, never move/play
     Playlist *addList(Playlist *pl, bool select);
     void closeList(int idx);
@@ -109,6 +112,12 @@ private:
     QLabel *title_, *artist_, *album_, *format_;
     QWidget *extras_;   // lyrics / EQ: mode row + pages
     QStackedWidget *pages_;
+    QScrollArea *eqScroll_ = nullptr;
+    QList<QWidget *> lyricsTools_;
+    QToolButton *lyricsMore_ = nullptr;
+    QString fullTitle_;
+    bool extrasWanted_ = true;   // lyrics/EQ button state; fitCover() shows them when they fit
+    QByteArray splitV_, splitH_;   // splitter state stacked (half screen) and side by side
     QToolButton *lyricsTab_, *eqTab_, *specTab_;
     SpectrumView *spectrum_;
     LyricsView *lyrics_;

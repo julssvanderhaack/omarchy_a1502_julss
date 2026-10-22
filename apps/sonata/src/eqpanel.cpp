@@ -87,7 +87,7 @@ EqPanel::EqPanel(QWidget *parent) : QWidget(parent)
     v->addLayout(top);
 
     curve_ = new EqCurve;
-    curve_->setMinimumHeight(90);
+    curve_->setMinimumHeight(50);
     curve_->setMaximumHeight(150);
     v->addWidget(curve_, 2);
 

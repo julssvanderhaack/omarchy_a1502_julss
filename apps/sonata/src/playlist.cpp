@@ -203,6 +203,7 @@ QVariant Playlist::data(const QModelIndex &idx, int role) const
         if (idx.column() == ColState) return iconFont(12);
         if (playing && idx.column() == ColTitle) {
             QFont f;
+            f.setPixelSize(12);   // the list's font-size in theme.cpp
             f.setBold(true);
             return f;
         }

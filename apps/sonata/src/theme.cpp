@@ -116,6 +116,9 @@ QToolButton::menu-indicator { image: none; width: 0; }
 QToolButton[role="text"] { color: %DIM%; padding: 4px 8px; }
 QToolButton[role="text"]:hover { color: %FG%; background: %BGL%; }
 QToolButton[role="text"]:checked { color: %FG%; background: %BGL%; }
+QToolButton[role="pagetab"] { color: %DIM%; font-size: 12px; padding: 3px 7px; border-bottom: 2px solid transparent; }
+QToolButton[role="pagetab"]:hover { color: %FG%; }
+QToolButton[role="pagetab"]:checked { color: %FG%; border-bottom: 2px solid %ACC%; }   /* like the list tabs */
 QTabBar { background: %BGD%; }
 QTabBar::tab { background: %BGD%; color: %DIM%; padding: 7px 14px; border: none; border-bottom: 2px solid transparent; }
 QTabBar::tab:selected { color: %FG%; background: %BG%; border-bottom: 2px solid %ACC%; }
@@ -125,6 +128,7 @@ QTableView, QListView {
   background: %BG%; alternate-background-color: %BGD%; border: none; outline: 0;
   selection-background-color: %SEL%; selection-color: %FG%; gridline-color: transparent;
 }
+QTableView { font-size: 12px; }   /* kept in step with Playlist's bold title font */
 QTableView::item { padding: 0 6px; border: none; }
 QTableView::item:selected { background: %SEL%; }
 QHeaderView { background: %BG%; border: none; }

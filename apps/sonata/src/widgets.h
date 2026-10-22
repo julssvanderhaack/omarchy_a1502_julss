@@ -52,7 +52,12 @@ class Bar : public QWidget {
     Q_OBJECT
 public:
     explicit Bar(QWidget *parent = nullptr);
-    void setRange(double max) { max_ = max; update(); }
+    void setRange(double max)
+    {
+        if (max == max_) return;   // called on every tick
+        max_ = max;
+        update();
+    }
     void setValue(double v);
     double value() const { return value_; }
     bool dragging() const { return drag_; }

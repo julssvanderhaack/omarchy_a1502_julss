@@ -7,6 +7,8 @@
 #include "mpris.h"
 #include "theme.h"
 #include <QApplication>
+#include <QElapsedTimer>
+#include <QHash>
 #include <QFile>
 #include <QStandardPaths>
 #include <QDirIterator>
@@ -16,6 +18,7 @@
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QStyleFactory>
+#include <QSplitter>
 #include <QTimer>
 #include <QUrl>
 #include <sys/socket.h>
@@ -95,6 +98,40 @@ static void migrateFromJulssMusic()
     }
 }
 
+// SONATA_PROF=1 (tests): time spent per receiver class and event type, every 10 s
+class ProfApp : public QApplication {
+public:
+    using QApplication::QApplication;
+    bool notify(QObject *o, QEvent *e) override
+    {
+        if (!on_) return QApplication::notify(o, e);
+        // named before delivery: DeferredDelete destroys the receiver
+        const QByteArray key = QByteArray(o->metaObject()->className()) + ":" + QByteArray::number(int(e->type()));
+        const qint64 t0 = clock_.nsecsElapsed();
+        const bool r = QApplication::notify(o, e);
+        {
+            auto &s = stats_[key];
+            s.first += clock_.nsecsElapsed() - t0;
+            ++s.second;
+        }
+        if (clock_.elapsed() - last_ > 10000) {
+            last_ = clock_.elapsed();
+            QList<QPair<qint64, QByteArray>> v;
+            qint64 total = 0;
+            for (auto it = stats_.cbegin(); it != stats_.cend(); ++it) v.append({it->first, it.key() + " x" + QByteArray::number(it->second)}), total += it->first;
+            std::sort(v.begin(), v.end(), [](auto &a, auto &b) { return a.first > b.first; });
+            fprintf(stderr, "PROF total %.1f ms in 10 s\n", total / 1e6);
+            for (int i = 0; i < std::min<int>(14, v.size()); ++i) fprintf(stderr, "PROF %8.2f ms  %s\n", v[i].first / 1e6, v[i].second.constData());
+            stats_.clear();
+        }
+        return r;
+    }
+    bool on_ = qEnvironmentVariableIsSet("SONATA_PROF");
+    QElapsedTimer clock_ = [] { QElapsedTimer t; t.start(); return t; }();
+    qint64 last_ = 0;
+    QHash<QByteArray, QPair<qint64, int>> stats_;
+};
+
 int main(int argc, char **argv)
 {
     // Build the message first: absolute paths, so the running instance can
@@ -116,7 +153,7 @@ int main(int argc, char **argv)
     if (sendToRunning(msg.isEmpty() ? QByteArray("\n") : msg)) return 0;
 
     av_log_set_level(AV_LOG_ERROR);
-    QApplication app(argc, argv);
+    ProfApp app(argc, argv);
     QApplication::setApplicationName("sonata");
     QApplication::setApplicationDisplayName("Sonata");
     QGuiApplication::setDesktopFileName("sonata");
@@ -151,6 +188,8 @@ int main(int argc, char **argv)
         const int delay = qEnvironmentVariableIntValue("SONATA_SHOT_DELAY");
         if (const QStringList sz = qEnvironmentVariable("SONATA_SHOT_SIZE").split('x'); sz.size() == 2)
             w.resize(sz[0].toInt(), sz[1].toInt());
+        if (const QStringList sp = qEnvironmentVariable("SONATA_SPLIT").split(','); sp.size() == 2)   // tests: drag the divider
+            QTimer::singleShot(1500, &w, [&w, sp] { w.findChild<QSplitter *>()->setSizes({sp[0].toInt(), sp[1].toInt()}); });
         QTimer::singleShot(delay ? delay : 3000, &w, [&w, shot] {
             w.grab().save(shot);
             if (qEnvironmentVariableIsSet("SONATA_QUIT")) w.close();

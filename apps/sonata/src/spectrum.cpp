@@ -26,7 +26,7 @@ SpectrumView::SpectrumView(Engine *engine, QWidget *parent) : QWidget(parent), e
         for (unsigned b = 0; b < bits; ++b) r |= ((i >> b) & 1u) << (bits - 1 - b);
         bitrev_[i] = r;
     }
-    setMinimumHeight(80);
+    setMinimumHeight(60);
     setAttribute(Qt::WA_OpaquePaintEvent);   // we paint the background ourselves (cached)
     timer_.setInterval(33);
     timer_.setTimerType(Qt::PreciseTimer);

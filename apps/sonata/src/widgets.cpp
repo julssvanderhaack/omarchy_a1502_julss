@@ -149,7 +149,7 @@ CoverView::CoverView(QWidget *parent) : QWidget(parent)
     QSizePolicy sp(QSizePolicy::Expanding, QSizePolicy::Preferred);
     sp.setHeightForWidth(true);
     setSizePolicy(sp);
-    setMinimumSize(120, 120);
+    setMinimumSize(0, 0);
 }
 
 void CoverView::setImage(const QImage &img)

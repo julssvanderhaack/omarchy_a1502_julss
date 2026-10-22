@@ -49,7 +49,6 @@ public:
     // spectrum view: latest n mono frames as they reach the speaker; returns the sample rate
     void setScopeEnabled(bool on) { dsp_.scope().setEnabled(on); }
     int scopeSnapshot(float *out, size_t n) const;
-    void setTickInterval(int ms) { if (poll_.interval() != ms) poll_.setInterval(ms); }
 
 signals:
     void trackStarted(quint64 token);

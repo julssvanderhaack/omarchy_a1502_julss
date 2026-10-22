@@ -30,6 +30,9 @@
 #include <QRandomGenerator>
 #include <QShortcut>
 #include <QSortFilterProxyModel>
+#include <QScrollArea>
+#include <QTextLayout>
+#include <QWheelEvent>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStandardPaths>
@@ -117,6 +120,7 @@ MainWindow::MainWindow()
     connect(engine_, &Engine::failed, this, &MainWindow::onFailed);
     connect(engine_, &Engine::stateChanged, this, [this](Engine::State s) {
         updatePlayButton();
+        lyrics_->setPlaying(s == Engine::Playing);
         if (s == Engine::Paused) scheduleSave();
     });
     connect(engine_, &Engine::finished, this, [this] {
@@ -135,9 +139,7 @@ MainWindow::MainWindow()
         }
         total_->setText(formatTime(dur));
         if (format_->text().isEmpty()) format_->setText(engine_->formatInfo());
-        // 10 Hz only while synced lyrics are on screen; 4 Hz is plenty otherwise
-        const bool karaoke = pages_->currentWidget() == lyrics_ && extras_->isVisible() && lyrics_->lyrics().synced && isVisible() && !isMinimized();
-        engine_->setTickInterval(karaoke ? 100 : 250);
+        // 4 Hz is enough: the lyrics keep their own clock between ticks
         if (pages_->currentWidget() == lyrics_) lyrics_->setPosition(pos, dur);
     });
     connect(engine_, &Engine::seeked, this, [this](double s) {
@@ -183,7 +185,7 @@ MainWindow::MainWindow()
     sc(Qt::CTRL | Qt::Key_L, [this] { setExtrasVisible(true); lyricsTab_->click(); });
     sc(Qt::CTRL | Qt::Key_E, [this] { setExtrasVisible(true); eqTab_->click(); });
     sc(Qt::CTRL | Qt::Key_G, [this] { setExtrasVisible(true); specTab_->click(); });
-    sc(Qt::CTRL | Qt::Key_K, [this] { setExtrasVisible(!extras_->isVisible()); });
+    sc(Qt::CTRL | Qt::Key_K, [this] { setExtrasVisible(!extrasWanted_); });
     sc(Qt::CTRL | Qt::Key_J, [this] {   // jump to what's playing
         if (!playingList_) return;
         tabs_->setCurrentIndex(lists_.indexOf(playingList_));
@@ -264,7 +266,7 @@ QWidget *MainWindow::buildPlaylistPane()
     table_->setWordWrap(false);
     table_->setTextElideMode(Qt::ElideRight);
     table_->verticalHeader()->hide();
-    table_->verticalHeader()->setDefaultSectionSize(27);
+    table_->verticalHeader()->setDefaultSectionSize(23);
     table_->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
     table_->horizontalHeader()->setHighlightSections(false);
     table_->horizontalHeader()->setSectionsClickable(true);
@@ -388,7 +390,7 @@ QWidget *MainWindow::buildNowPane()
     head->addWidget(cover_, 0, Qt::AlignTop);
     auto *info = new QVBoxLayout;
     info->setSpacing(4);
-    title_ = new QLabel("Nada sonando");
+    title_ = new QLabel(fullTitle_ = "Nada sonando");
     title_->setProperty("role", "title");
     title_->setWordWrap(true);
     artist_ = new QLabel("Abre canciones con Ctrl+O, arrástralas aquí o haz clic en ellas en el explorador de archivos");
@@ -400,6 +402,7 @@ QWidget *MainWindow::buildNowPane()
     format_ = new QLabel;
     format_->setProperty("role", "caption");
     for (QLabel *l : {title_, artist_, album_, format_}) l->setTextInteractionFlags(Qt::TextSelectableByMouse);
+    title_->installEventFilter(this);   // re-elides on width changes
     info->addStretch();
     info->addWidget(title_);
     info->addWidget(artist_);
@@ -415,7 +418,7 @@ QWidget *MainWindow::buildNowPane()
     ev->setContentsMargins(0, 0, 0, 0);
     ev->setSpacing(12);
     auto *modeRow = new QHBoxLayout;
-    modeRow->setSpacing(2);
+    modeRow->setSpacing(0);
     lyricsTab_ = new QToolButton;
     lyricsTab_->setText("Letra");
     eqTab_ = new QToolButton;
@@ -426,17 +429,18 @@ QWidget *MainWindow::buildNowPane()
     auto *grp = new QButtonGroup(this);
     for (QToolButton *b : {lyricsTab_, eqTab_, specTab_}) {
         b->setCheckable(true);
-        b->setProperty("role", "text");
+        b->setProperty("role", "pagetab");
         b->setCursor(Qt::PointingHandCursor);
         b->setFocusPolicy(Qt::NoFocus);
         grp->addButton(b);
         modeRow->addWidget(b);
     }
     lyricsTab_->setChecked(true);
-    modeRow->addStretch();
     lyricsSource_ = new QLabel;
     lyricsSource_->setProperty("role", "caption");
-    modeRow->addWidget(lyricsSource_);
+    lyricsSource_->setAlignment(Qt::AlignCenter);
+    modeRow->addWidget(lyricsSource_, 1);   // takes the free space, elided rather than widening the row
+    modeRow->addStretch(0);
     auto mkSmall = [&](const QString &txt, const QString &tip) {
         auto *b = new QToolButton;
         b->setText(txt);
@@ -450,6 +454,18 @@ QWidget *MainWindow::buildNowPane()
     auto *earlier = mkSmall("−0,5 s", "La letra va retrasada: adelantarla");
     auto *later = mkSmall("+0,5 s", "La letra va adelantada: retrasarla");
     auto *refetch = mkSmall("Buscar otra vez", "Volver a buscar la letra en internet");
+    lyricsTools_ = {earlier, later, refetch};
+    // narrow windows: the same three tools behind "⋯" so the row never
+    // forces the window wider than its tile
+    lyricsMore_ = mkSmall("⋯", "Ajustar la letra");
+    auto *moreMenu = new QMenu(lyricsMore_);
+    moreMenu->addAction("Adelantar la letra 0,5 s", this, [this] { lyrics_->setOffset(lyrics_->offset() + 0.5); });
+    moreMenu->addAction("Retrasar la letra 0,5 s", this, [this] { lyrics_->setOffset(lyrics_->offset() - 0.5); });
+    moreMenu->addAction("Buscar otra vez", refetch, &QToolButton::click);
+    lyricsMore_->setMenu(moreMenu);
+    lyricsMore_->setPopupMode(QToolButton::InstantPopup);
+    lyricsMore_->setStyleSheet("QToolButton::menu-indicator { image: none; width: 0; }");
+    lyricsSource_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
     ev->addLayout(modeRow);
 
     pages_ = new QStackedWidget;
@@ -457,7 +473,15 @@ QWidget *MainWindow::buildNowPane()
     lyrics_->setStatus("La letra aparecerá aquí");
     eq_ = new EqPanel;
     pages_->addWidget(lyrics_);
-    pages_->addWidget(eq_);
+    // the EQ scrolls instead of imposing its full height: in a half-screen
+    // tile the song list below keeps its room
+    eqScroll_ = new QScrollArea;
+    eqScroll_->setWidget(eq_);
+    eqScroll_->setWidgetResizable(true);
+    eqScroll_->setFrameShape(QFrame::NoFrame);
+    eqScroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    eqScroll_->setMinimumHeight(60);
+    pages_->addWidget(eqScroll_);
     spectrum_ = new SpectrumView(engine_);
     pages_->addWidget(spectrum_);
     ev->addWidget(pages_, 1);
@@ -465,10 +489,8 @@ QWidget *MainWindow::buildNowPane()
     v->addStretch(0);   // keeps the cover at the top while the extras are hidden
 
     auto showPage = [=, this](QWidget *page) {
-        pages_->setCurrentWidget(page);
-        for (auto *w : {static_cast<QWidget *>(lyricsSource_), static_cast<QWidget *>(earlier), static_cast<QWidget *>(later),
-                        static_cast<QWidget *>(refetch)})
-            w->setVisible(page == lyrics_);
+        pages_->setCurrentWidget(page == eq_ ? eqScroll_ : page);
+        updateModeRow();
         if (page == lyrics_) lyrics_->setPosition(engine_->position(), engine_->duration());
         scheduleSave();
     };
@@ -522,7 +544,7 @@ QWidget *MainWindow::buildTransport()
     shuffleBtn_ = new GlyphButton(Glyph::Shuffle, 18, "Aleatorio");
     shuffleBtn_->setCheckable(true);
     repeatBtn_ = new GlyphButton(Glyph::Repeat, 18, "Repetir: no");
-    volBtn_ = new GlyphButton(Glyph::VolHigh, 18, "Silenciar");
+    volBtn_ = new GlyphButton(Glyph::VolHigh, 18, "Silenciar (rueda: volumen)");
     vol_ = new Bar;
     vol_->setFixedWidth(96);
     vol_->setRange(1.0);
@@ -545,6 +567,7 @@ QWidget *MainWindow::buildTransport()
     h->addWidget(repeatBtn_);
     h->addSpacing(6);
     h->addWidget(volBtn_);
+    volBtn_->installEventFilter(this);
     h->addWidget(vol_);
     h->addSpacing(4);
     h->addWidget(extrasBtn_);
@@ -571,27 +594,93 @@ QWidget *MainWindow::buildTransport()
 
 void MainWindow::fitCover()
 {
-    // cover: up to ~40 % of the pane width, but leave room for the lyrics;
-    // with lyrics/EQ hidden it may grow into the free space
-    const bool extras = !extras_->isHidden();
-    const double hf = extras ? 0.38 : 0.85;
-    const int s = std::clamp(std::min(int(nowPane_->width() * 0.40), int(nowPane_->height() * hf)), 96, extras ? 340 : 480);
-    if (cover_->width() != s) cover_->setFixedSize(s, s);
+    // The cover takes whatever the pane leaves once title, artist and album
+    // fit, so dragging the divider shrinks it (and finally hides it); the
+    // pane's minimum is the text alone, which is where the divider stops.
+    const bool stacked = split_->orientation() == Qt::Vertical;
+    auto natural = [](QLabel *l) { return l->isHidden() || l->text().isEmpty() ? 0 : l->fontMetrics().horizontalAdvance(l->text()) + 4; };
+    // the title wraps (and finally elides), so it asks for at most 200 px;
+    // artist, album and format stay on one line
+    const int titleW = title_->fontMetrics().horizontalAdvance(fullTitle_) / 2 + 24;
+    const int infoW = std::min(380, std::max({std::min(titleW, 200), natural(artist_), natural(album_), natural(format_), 100}));
+    const int infoH = title_->fontMetrics().lineSpacing() * 2 + artist_->sizeHint().height() + (album_->isHidden() ? 0 : album_->sizeHint().height())
+                      + format_->sizeHint().height() + 18;
+    const QMargins m = nowPane_->layout()->contentsMargins();
+    const int spacing = nowPane_->layout()->spacing();
+    int modeW = lyricsMore_->sizeHint().width();
+    for (QToolButton *b : {lyricsTab_, eqTab_, specTab_}) modeW += b->sizeHint().width() + 2;
+    nowPane_->setMinimumSize(m.left() + m.right() + infoW, m.top() + m.bottom() + infoH);
+
+    const int paneW = nowPane_->width(), paneH = nowPane_->height();
+    // lyrics/EQ/spectrum only while there is room for their tabs and a few lines
+    const int extrasNeed = spacing + lyricsTab_->sizeHint().height() + 12 + 60;
+    const bool extras = extrasWanted_ && paneH - m.top() - m.bottom() - infoH >= extrasNeed && paneW - m.left() - m.right() >= modeW;
+    if (extras_->isHidden() == extras) extras_->setVisible(extras);
+    updateModeRow();
+    const int byWidth = paneW - m.left() - m.right() - 18 - infoW;   // what the text leaves beside it
+    const int inner = paneH - m.top() - m.bottom();
+    int byHeight;
+    if (stacked) byHeight = extras ? std::min(int(inner * 0.45), inner - extrasNeed) : inner;
+    else byHeight = int(paneH * (extras ? 0.38 : 0.85));
+    const int s = std::min({byWidth, byHeight, int(paneW * 0.45), extras ? 340 : 480});
+    cover_->setVisible(s >= 48);
+    if (s >= 48 && cover_->width() != s) cover_->setFixedSize(s, s);
+}
+
+// Wraps the title, but in short panes (quarter-screen tile) stops after a
+// few lines with "…"; the whole title stays in the tooltip.
+void MainWindow::setTitleText(const QString &text)
+{
+    fullTitle_ = text;
+    const int maxLines = nowPane_->height() < 420 ? 2 : 3;
+    const int w = title_->width();
+    QString shown = text;
+    if (w > 40) {
+        QTextLayout layout(text, title_->font());
+        layout.beginLayout();
+        int lines = 0, cut = -1;
+        for (QTextLine line = layout.createLine(); line.isValid(); line = layout.createLine()) {
+            line.setLineWidth(w);
+            if (++lines == maxLines) cut = line.textStart();
+        }
+        layout.endLayout();
+        if (lines > maxLines && cut >= 0)
+            shown = text.left(cut) + QFontMetrics(title_->font()).elidedText(text.mid(cut), Qt::ElideRight, w - 2);
+    }
+    if (title_->text() != shown) title_->setText(shown);
+    title_->setToolTip(shown != text ? text : QString());
+}
+
+void MainWindow::updateModeRow()
+{
+    const bool lyricsPage = pages_->currentWidget() == lyrics_;
+    // the now-playing pane is the whole width when stacked, ~45 % side by side
+    const bool wide = nowPane_->width() >= 600;
+    lyricsSource_->setVisible(lyricsPage);
+    for (QWidget *w : lyricsTools_) w->setVisible(lyricsPage && wide);
+    lyricsMore_->setVisible(lyricsPage && !wide);
 }
 
 void MainWindow::setExtrasVisible(bool on)
 {
     extrasBtn_->setChecked(on);
-    if (extras_->isHidden() != on) return;
-    extras_->setVisible(on);
-    if (on) lyrics_->setPosition(engine_->position(), engine_->duration());
-    fitCover();
+    if (extrasWanted_ == on) return;
+    extrasWanted_ = on;
+    fitCover();   // shows them if the pane has room
+    if (extras_->isVisible()) lyrics_->setPosition(engine_->position(), engine_->duration());
     scheduleSave();
 }
 
 bool MainWindow::eventFilter(QObject *o, QEvent *e)
 {
     if (o == nowPane_ && e->type() == QEvent::Resize) fitCover();
+    if (o == title_ && e->type() == QEvent::Resize && static_cast<QResizeEvent *>(e)->size().width() != static_cast<QResizeEvent *>(e)->oldSize().width())
+        setTitleText(fullTitle_);
+    if (o == volBtn_ && e->type() == QEvent::Wheel) {
+        const int d = static_cast<QWheelEvent *>(e)->angleDelta().y();
+        if (d) setVolume(std::clamp(volume() + (d > 0 ? 0.05 : -0.05), 0.0, 1.0));
+        return true;
+    }
     if (table_ && o == table_->viewport() && e->type() == QEvent::Resize) {
         // artist/album share the width with the title instead of fixed pixels
         // and drop out when the list gets too narrow for them
@@ -657,11 +746,25 @@ void MainWindow::resizeEvent(QResizeEvent *e)
 {
     QMainWindow::resizeEvent(e);
     const bool stacked = width() < 900 && height() > width();
+    if (lyricsMore_) updateModeRow();
+    // narrow tiles: the volume slider goes (wheel over the speaker still works),
+    // then shuffle/repeat, so the transport never forces the window wider
+    vol_->setVisible(width() >= 720);
+    shuffleBtn_->setVisible(width() >= 520);
+    repeatBtn_->setVisible(width() >= 520);
     if (stacked == (split_->orientation() == Qt::Vertical)) return;
+    if (isVisible()) (stacked ? splitH_ : splitV_) = split_->saveState();   // remember the layout being left
     split_->setOrientation(stacked ? Qt::Vertical : Qt::Horizontal);
     split_->insertWidget(0, stacked ? nowPane_ : listPane_);
-    if (stacked) split_->setSizes({int(height() * 0.5), int(height() * 0.5)});
-    else split_->setSizes({int(width() * 0.56), int(width() * 0.44)});
+    updateModeRow();
+    fitCover();
+    // once the splitter has its new geometry; stacked, the list gets the larger share
+    QTimer::singleShot(0, this, [this, stacked] {
+        // where the user left it
+        if (!(stacked ? splitV_ : splitH_).isEmpty() && split_->restoreState(stacked ? splitV_ : splitH_)) return;
+        const int len = stacked ? split_->height() : split_->width();
+        split_->setSizes(stacked ? QList<int>{int(len * 0.4), int(len * 0.6)} : QList<int>{int(len * 0.56), int(len * 0.44)});
+    });
 }
 
 void MainWindow::keyPressEvent(QKeyEvent *e)
@@ -685,14 +788,15 @@ Playlist *MainWindow::addList(Playlist *pl, bool select)
     connect(pl, &Playlist::scanned, this, [this, pl] {
         if (pl != playingList_) return;
         const Item *it = pl->find(playingUid_);
-        if (!it || title_->text() == it->info.displayTitle()) return;
+        if (!it || fullTitle_ == it->info.displayTitle()) return;
         const TrackInfo &t = it->info;
-        title_->setText(t.displayTitle());
+        setTitleText(t.displayTitle());
         artist_->setText(t.displayArtist().isEmpty() ? "Artista desconocido" : t.displayArtist());
         QString alb = t.album;
         if (!t.date.isEmpty()) alb += alb.isEmpty() ? t.date : QString("  ·  %1").arg(t.date);
         album_->setText(alb);
         album_->setVisible(!alb.isEmpty());
+        fitCover();   // the new text sets how small the pane may get
         setWindowTitle(t.displayArtist().isEmpty() ? t.displayTitle() : t.displayTitle() + " — " + t.displayArtist());
         emit metadataChanged();
     });
@@ -1010,12 +1114,13 @@ void MainWindow::planNext()
 void MainWindow::showTrack(const Item *it)
 {
     const TrackInfo &t = it->info;
-    title_->setText(t.displayTitle());
+    setTitleText(t.displayTitle());
     artist_->setText(t.displayArtist().isEmpty() ? "Artista desconocido" : t.displayArtist());
     QString alb = t.album;
     if (!t.date.isEmpty()) alb += alb.isEmpty() ? t.date : QString("  ·  %1").arg(t.date);
     album_->setText(alb);
     album_->setVisible(!alb.isEmpty());
+        fitCover();   // the new text sets how small the pane may get
     format_->setText(engine_->formatInfo());
     setWindowTitle(t.displayArtist().isEmpty() ? t.displayTitle() : t.displayTitle() + " — " + t.displayArtist());
     total_->setText(formatTime(t.duration));
@@ -1190,7 +1295,7 @@ void MainWindow::updateVolumeIcon()
 {
     const double v = volume();
     volBtn_->setGlyph(v <= 0 ? Glyph::VolOff : v < 0.34 ? Glyph::VolLow : v < 0.67 ? Glyph::VolMed : Glyph::VolHigh);
-    volBtn_->setToolTip(QString("Volumen %1 %").arg(qRound(v * 100)));
+    volBtn_->setToolTip(QString("Volumen %1 % · clic: silenciar, rueda: cambiar").arg(qRound(v * 100)));
     volBtn_->update();
 }
 
@@ -1248,6 +1353,7 @@ void MainWindow::saveState()
     for (const QString &f : QDir(plDir).entryList({"*.json"}, QDir::Files))
         if (!keep.contains(f)) QFile::remove(plDir + '/' + f);
 
+    (split_->orientation() == Qt::Vertical ? splitV_ : splitH_) = split_->saveState();
     const EqSettings eq = eq_->settings();
     QJsonArray gains;
     for (float g : eq.gains) gains << g;
@@ -1259,10 +1365,11 @@ void MainWindow::saveState()
         {"repeat", int(repeat_)},
         {"eq", QJsonObject{{"enabled", eq.enabled}, {"preamp", eq.preamp}, {"auto", eq.autoPreamp}, {"gains", gains}}},
         {"eqCustom", eq_->customPresets()},
-        {split_->orientation() == Qt::Vertical ? "splitV" : "split", QString::fromLatin1(split_->saveState().toBase64())},
-        {"page", pages_->currentWidget() == eq_ ? "eq" : pages_->currentWidget() == spectrum_ ? "spectrum" : "lyrics"},
+        {"split", QString::fromLatin1(splitH_.toBase64())},
+        {"splitStack", QString::fromLatin1(splitV_.toBase64())},
+        {"page", pages_->currentWidget() == eqScroll_ ? "eq" : pages_->currentWidget() == spectrum_ ? "spectrum" : "lyrics"},
         {"listVisible", listPane_->isVisible()},
-        {"extrasVisible", !extras_->isHidden()},
+        {"extrasVisible", extrasWanted_},
     };
     if (hasCurrent()) {
         double pos = engine_->state() != Engine::Stopped ? engine_->position() : std::max(0.0, resumePos_);
@@ -1297,8 +1404,11 @@ void MainWindow::loadState()
     hh->setSectionResizeMode(Playlist::ColTitle, QHeaderView::Stretch);
     hh->setStretchLastSection(false);
 
-    if (o.contains("split")) split_->restoreState(QByteArray::fromBase64(o.value("split").toString().toLatin1()));
-    else split_->setSizes({620, 480});
+    // "splitStack", not the old "splitV": that one was saved while the
+    // artwork squeezed the list
+    splitV_ = QByteArray::fromBase64(o.value("splitStack").toString().toLatin1());
+    splitH_ = QByteArray::fromBase64(o.value("split").toString().toLatin1());
+    if (splitH_.isEmpty() || !split_->restoreState(splitH_)) split_->setSizes({620, 480});
     split_->setOrientation(Qt::Horizontal);   // resizeEvent decides the real layout
     if (!o.value("listVisible").toBool(true)) {
         listPane_->hide();

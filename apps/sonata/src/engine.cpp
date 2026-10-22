@@ -329,7 +329,7 @@ int Engine::scopeSnapshot(float *out, size_t n) const
 Engine::Engine(QObject *parent) : QObject(parent), ring_(1u << 18)
 {
     out_ = std::make_unique<Output>(ring_, dsp_);
-    poll_.setInterval(100);
+    poll_.setInterval(250);   // seek bar and clock; the lyrics extrapolate between ticks
     connect(&poll_, &QTimer::timeout, this, &Engine::pollAudible);
     thread_ = std::thread([this] { run(); });
 }
@@ -419,8 +419,8 @@ void Engine::setState(State s)
 {
     if (s == state_) return;
     state_ = s;
-    if (s == Stopped) poll_.stop();
-    else poll_.start();
+    if (s == Playing) poll_.start();   // nothing moves while paused
+    else poll_.stop();
     emit stateChanged(s);
 }
 
@@ -453,7 +453,7 @@ QString Engine::formatInfo() const
     return {};
 }
 
-// Main thread, every 100 ms while playing: which segment is the speaker on?
+// Main thread, every 250 ms while playing: which segment is the speaker on?
 void Engine::pollAudible()
 {
     const uint64_t r = ring_.readIndex();
@@ -475,7 +475,7 @@ void Engine::pollAudible()
 
     if (eofAll_ && ring_.filled() == 0 && state_ == Playing) {
         // let PipeWire play out what it already has
-        if (++drainTicks_ * 100 > 1000.0 * pend / std::max(1, out_->rate() * out_->channels()) + 100) {
+        if (++drainTicks_ * poll_.interval() > 1000.0 * pend / std::max(1, out_->rate() * out_->channels()) + 100) {
             drainTicks_ = 0;
             stop();
             emit finished();
