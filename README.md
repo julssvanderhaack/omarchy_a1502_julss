@@ -212,32 +212,16 @@ lo instala en `~/.local` y lo asocia a los tipos de audio. Aquí sigue
 de cada canción. Para volver a Audacious:
 `xdg-mime default audacious.desktop audio/mpeg audio/flac …`.
 
-## Explorador de archivos Luna (`apps/luna`)
+## Explorador de archivos Luna
 
-Alternativa a Nautilus en C++17 + Qt6 Widgets, con el nombre y el icono de Luna,
-la gata siamesa. Todo en castellano y con los colores del tema activo de Omarchy.
+Vive en su propio repositorio: **[julssvanderhaack/luna](https://github.com/julssvanderhaack/luna)**
+(código, instrucciones y [zip con el ejecutable](https://github.com/julssvanderhaack/luna/releases)).
+Alternativa a Nautilus en C++17 + Qt6, con el nombre y el icono de Luna, la gata
+siamesa, y los colores del tema de Omarchy.
 
-- **Vistas:** iconos, compacta, lista, lista detallada, árbol y columnas; pestañas
-  y vista dividida (F3). Barra de ruta al estilo Nautilus (botones o texto) y
-  barra lateral con lugares, marcadores GTK (los mismos que Nautilus y el
-  widget de Lugares), dispositivos (montar/expulsar) y red.
-- **Archivos:** abrir con (respeta `mimeapps.list` y lanza con `uwsm-app`),
-  mover a / copiar a, copiar y mover con progreso y conflictos, papelera
-  estándar, renombrar en lote, comprimir/extraer, enlaces.
-- **Propiedades:** permisos (casillas, octal, especiales, recursivo),
-  metadatos de audio/vídeo (libmediainfo) y fotos con EXIF/GPS (exiv2).
-- **Conectar a servidor:** SFTP/SSH, FTP, FTPS, SMB y NFS a través de GVFS.
-- **Rendimiento:** listado con `readdir`+`fstatat` en hilos aparte; búsqueda
-  recursiva con `getdents64` a prioridad mínima (≈6× menos CPU que `find`);
-  miniaturas en la caché freedesktop compartida, con vista previa EXIF al
-  instante. Arranca en ~0,35 s y no consume CPU en reposo.
-
-`install.sh` instala las dependencias, compila e instala en `~/.local`
-(lanzador «Luna» e icono). No lo pone como explorador predeterminado; para
-hacerlo: `xdg-mime default luna.desktop inode/directory`.
-
-Para desarrollar: `cmake -S apps/luna -B apps/luna/build && cmake --build apps/luna/build`.
-Ajustes en `~/.config/luna/luna.conf`.
+`install.sh` instala las dependencias, lo clona (o actualiza) en `~/src/luna`, lo
+compila para esta CPU y lo instala en `~/.local`. No lo pone como explorador
+predeterminado; para hacerlo: `xdg-mime default luna.desktop inode/directory`.
 
 ## Flatpak
 

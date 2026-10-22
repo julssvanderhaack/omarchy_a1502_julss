@@ -104,12 +104,20 @@ if omarchy pkg add cmake ffmpeg; then
   [ -f "$SONATA_DIR/data/sonata.desktop" ] &&
     xdg-mime default sonata.desktop $(grep '^MimeType=' "$SONATA_DIR/data/sonata.desktop" | cut -d= -f2 | tr ';' ' ') 2>/dev/null || true
 fi
-# Luna, explorador de archivos propio (C++/Qt6): compila e instala en ~/.local.
+# Luna, explorador de archivos propio (C++/Qt6), en su propio repo
+# (github.com/julssvanderhaack/luna): lo clona o actualiza en ~/src/luna,
+# compila para esta CPU e instala en ~/.local.
 # No se pone como explorador predeterminado (Nautilus sigue siéndolo).
+LUNA_DIR="$HOME/src/luna"
 if omarchy pkg add cmake qt6-svg libmediainfo exiv2 poppler-qt6 ffmpegthumbnailer gvfs gvfs-smb libarchive; then
-  cmake -S "$REPO_DIR/apps/luna" -B "$REPO_DIR/apps/luna/build" -DCMAKE_BUILD_TYPE=Release &&
-    cmake --build "$REPO_DIR/apps/luna/build" -j"$(nproc)" &&
-    cmake --install "$REPO_DIR/apps/luna/build" --prefix "$HOME/.local" &&
+  if [ -d "$LUNA_DIR/.git" ]; then
+    git -C "$LUNA_DIR" pull --ff-only || true
+  else
+    git clone https://github.com/julssvanderhaack/luna.git "$LUNA_DIR"
+  fi &&
+    cmake -S "$LUNA_DIR" -B "$LUNA_DIR/build" -DCMAKE_BUILD_TYPE=Release &&
+    cmake --build "$LUNA_DIR/build" -j"$(nproc)" &&
+    cmake --install "$LUNA_DIR/build" --prefix "$HOME/.local" &&
     gtk-update-icon-cache -f -t "$HOME/.local/share/icons/hicolor" 2>/dev/null
   update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
 fi
