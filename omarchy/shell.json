@@ -90,7 +90,7 @@
       ]
     },
     "position": "top",
-    "transparent": false
+    "transparent": true
   },
   "cloneSourceRestores": [
     "julss.notifications-service",
@@ -141,6 +141,9 @@
     },
     {
       "id": "julss.disk"
+    },
+    {
+      "id": "julss.fan"
     },
     {
       "id": "julss.flatpak"

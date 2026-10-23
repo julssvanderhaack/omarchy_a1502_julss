@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
@@ -272,19 +273,24 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(420))
-    contentHeight: panel.fittedContentHeight(column.implicitHeight)
+    contentHeight: panel.fittedContentHeight(header.implicitHeight + Style.space(8) + listColumn.implicitHeight, Style.space(600))
 
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
+      onMoveRequested: function(dx, dy) {
+        if (dy !== 0)
+          listFlick.contentY = Math.max(0, Math.min(listFlick.contentY + dy * Style.space(48),
+                                                    listFlick.contentHeight - listFlick.height))
+      }
       onTextKey: function(text) {
         if (text === "r" || text === "R") root.scan()
       }
 
       Column {
-        id: column
+        id: header
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
@@ -333,6 +339,28 @@ Panel {
         PanelSeparator {
           foreground: root.barForeground
         }
+      }
+
+      // Las listas se desplazan; la cabecera de arriba se queda fija.
+      Flickable {
+        id: listFlick
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.top: header.bottom
+        anchors.topMargin: Style.space(8)
+        anchors.bottom: parent.bottom
+        contentWidth: width
+        contentHeight: listColumn.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        flickableDirection: Flickable.VerticalFlick
+        interactive: contentHeight > height
+        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+      Column {
+        id: listColumn
+        width: listFlick.width
+        spacing: Style.space(8)
 
         PanelSectionHeader {
           text: "CONECTADOS AHORA"
@@ -379,6 +407,7 @@ Panel {
             offline: true
           }
         }
+      }
       }
     }
   }

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "id": "julss.fan",
+  "name": "Ventilador",
+  "version": "1.0.0",
+  "author": "julss",
+  "description": "Configura mbpfan: a qué temperatura sube cada velocidad del ventilador, con la curva y los escalones",
+  "kinds": [
+    "panel"
+  ],
+  "entryPoints": {
+    "panel": "Panel.qml"
+  }
+}

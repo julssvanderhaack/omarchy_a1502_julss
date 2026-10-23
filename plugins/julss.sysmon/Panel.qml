@@ -247,6 +247,11 @@ Panel {
     Quickshell.execDetached(["omarchy-shell", "shell", "summon", "julss.disk", "{}"])
   }
 
+  function openFan() {
+    root.close()
+    Quickshell.execDetached(["omarchy-shell", "shell", "summon", "julss.fan", "{}"])
+  }
+
   function openBtop() {
     root.close()
     if (root.bar) root.bar.run("omarchy-launch-or-focus-tui btop")
@@ -593,13 +598,37 @@ Panel {
           width: parent.width
           spacing: Style.space(20)
 
-          Column {
+          // Clic: panel julss.fan para configurar mbpfan (curva temperatura → rpm).
+          Item {
             visible: root.fanPercent >= 0
             width: (parent.width - parent.spacing) / 2
-            spacing: Style.space(8)
+            implicitHeight: fanCol.implicitHeight
 
-            SectionTitle { title: "VENTILADOR"; detail: root.fanRpm + " rpm" }
-            UsageBar { percent: root.fanPercent; fillColor: Color.accent }
+            Column {
+              id: fanCol
+              width: parent.width
+              spacing: Style.space(8)
+
+              SectionTitle {
+                title: "VENTILADOR"
+                arrow: fanMouse.containsMouse
+                detail: root.fanRpm + " rpm"
+              }
+              UsageBar { percent: root.fanPercent; fillColor: Color.accent }
+            }
+
+            MouseArea {
+              id: fanMouse
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.openFan()
+            }
+
+            PanelToolTip {
+              visible: fanMouse.containsMouse
+              text: "Configurar a qué temperatura sube el ventilador"
+            }
           }
 
           // Clic: panel de almacenamiento (julss.disk) con el reparto del disco.
@@ -614,7 +643,8 @@ Panel {
               spacing: Style.space(8)
 
               SectionTitle {
-                title: diskMouse.containsMouse ? "DISCO  󰁔" : "DISCO"
+                title: "DISCO"
+                arrow: diskMouse.containsMouse
                 detail: Math.round(root.diskUsedGiB) + " / " + Math.round(root.diskTotalGiB) + " GiB"
               }
               UsageBar { percent: root.diskPercent; fillColor: root.usageColor(root.diskPercent) }
@@ -655,6 +685,9 @@ Panel {
   component SectionTitle: Item {
     property string title: ""
     property string detail: ""
+    // Flecha de "abrir" tras el título; va superpuesta y no cuenta en la
+    // altura (el glifo es de otra fuente, más alta, y movía la fila).
+    property bool arrow: false
     width: parent ? parent.width : 0
     implicitHeight: Math.max(sectionHeader.implicitHeight, sectionDetail.implicitHeight)
 
@@ -664,6 +697,19 @@ Panel {
       foreground: root.bar.foreground
       fontFamily: root.bar.fontFamily
       anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+    }
+
+    Text {
+      visible: parent.arrow
+      textFormat: Text.PlainText
+      text: "󰁔"
+      color: root.bar.foreground
+      font.pixelSize: Style.font.caption
+      height: sectionHeader.height
+      verticalAlignment: Text.AlignVCenter
+      anchors.left: sectionHeader.right
+      anchors.leftMargin: Style.space(6)
       anchors.verticalCenter: parent.verticalCenter
     }
 

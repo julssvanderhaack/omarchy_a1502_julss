@@ -141,6 +141,13 @@ BarWidget {
     function toggle(): void { root.togglePanel() }
   }
 
+  TextMetrics {
+    id: widthMetrics
+    font.family: button.fontFamily
+    font.pixelSize: button.fontSize
+    text: root.displayText.replace(/[0-9]/g, "0")
+  }
+
   WidgetButton {
     id: button
     anchors.fill: parent
@@ -149,6 +156,10 @@ BarWidget {
     labelVisible: !root.vertical
     hasVisualContent: root.vertical ? root.verticalLines.length > 0 : text !== ""
     fixedHeight: root.vertical ? root.verticalLines.length * Style.bar.iconSlot : -1
+    // julss: ancho fijo (cifras medidas como "0" y redondeado hacia arriba);
+    // si no, el ancho bailaba 1 px con los segundos y movía todo lo que hay a
+    // la izquierda en la barra, y con ello los paneles abiertos.
+    fixedWidth: root.vertical ? -1 : Math.ceil(widthMetrics.advanceWidth + scaledHorizontalMargin * 2) + 1
     horizontalMargin: 6  // julss: algo más junto (Omarchy: 8.75)
     verticalPadding: 8.75
 

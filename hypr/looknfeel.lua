@@ -41,9 +41,9 @@
 -- Fully opaque windows: no alpha blending of what's underneath, and lets
 -- fullscreen apps use direct scanout. Overrides Omarchy's default-opacity
 -- (0.985 0.96) and browser (1.0 0.985) rules, which load before this file.
-o.window({ tag = "default-opacity" }, { opacity = "1 0.9" })
-o.window({ tag = "chromium-based-browser" }, { opacity = "1 0.9" })
-o.window({ tag = "firefox-based-browser" }, { opacity = "1 0.9" })
+o.window({ tag = "default-opacity" }, { opacity = "1 0.85" })
+o.window({ tag = "chromium-based-browser" }, { opacity = "1 0.85" })
+o.window({ tag = "firefox-based-browser" }, { opacity = "1 0.85" })
 
 -- https://wiki.hypr.land/Configuring/Basics/Variables/#layout
 -- hl.config({

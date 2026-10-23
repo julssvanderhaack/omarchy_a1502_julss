@@ -28,11 +28,12 @@ hl.unbind("SUPER + SHIFT + S")
 o.bind("SUPER + SHIFT + S", "Captura de area de pantalla", "omarchy-capture-screenshot")
 hl.unbind("SUPER + SHIFT + E")
 
-o.bind("SUPER + SHIFT + E","Explorador de archivos","nautilus")
+o.bind("SUPER + SHIFT + E", "Explorador de archivos", "luna")
 --o.bind("XF86LaunchA", "Vista de ventanas", "hyprctl dispatch overview:toggle")
 o.bind("XF86LaunchA", "Portapapeles", "omarchy menu clipboard")
 --o.bind("XF86LaunchB", "Nautilus", "omarchy menu toggle apps")
-o.bind("XF86LaunchB","Nautilus", "nautilus")
+-- Tecla de F4 (Launchpad en el MacBook): Luna en lugar de Nautilus.
+o.bind("XF86LaunchB", "Luna", "luna")
 
 hl.unbind("SUPER + SHIFT + M")
 hl.unbind("SUPER + M")

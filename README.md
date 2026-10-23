@@ -35,6 +35,7 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.audio/                # Panel Sonido en castellano + sección APLICACIONES siempre visible (volumen y silencio por app)
 ├── julss.clock/                # Reloj con segundos + calendario, en castellano (locale es_ES); el panel se ensancha con meses largos
 ├── julss.lan/                  # Red local: escanea la LAN (ping + vecinos + mDNS/DNS/NetBIOS/UPnP) y lista dispositivos con nombre, IP y fabricante
+├── julss.fan/                  # Ventilador: curva temperatura → rpm de mbpfan (clic en VENTILADOR del monitor); necesita mbpfan parcheado (PR #273) y /usr/local/bin/julss-fan-apply
 ├── julss.disk/                 # Almacenamiento: reparto del disco en queso, anillos, mapa o árbol, navegando por carpetas (clic en DISCO del monitor)
 ├── julss.flatpak/              # Gestor Flatpak: instaladas (permisos, datos, desinstalar), actualizaciones, buscar en Flathub e instalar .flatpak/.flatpakref/.flatpakrepo abiertos desde Archivos
 ├── julss.menu/                 # Menú/launcher propio

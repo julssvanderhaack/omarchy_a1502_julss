@@ -24,6 +24,14 @@
 #   julss-appearance set win-active|win-inactive 0-100
 #                                          opacidad de ventanas (reglas de
 #                                          opacity en hypr/looknfeel.lua)
+#   julss-appearance set border-color '#rrggbb'|theme
+#                                          color del borde de la ventana activa y
+#                                          de paneles/notificaciones de la shell
+#                                          ([hyprland] active-border en shell.toml):
+#                                          bloque propio al final de
+#                                          hypr/looknfeel.lua (se carga después
+#                                          del tema); vuelve al del tema en cada
+#                                          cambio de tema, como el de la barra
 #   julss-appearance open-dir gtk|icons|cursors
 #                                          abre (creándola) la carpeta de usuario
 #                                          de temas GTK (~/.local/share/themes) o
@@ -49,6 +57,8 @@ LOOKNFEEL = HOME / ".config/hypr/looknfeel.lua"
 # Reglas de looknfeel.lua cuya opacidad se controla ("activa inactiva").
 OPACITY_RULE = re.compile(r'^(o\.window\(\{ tag = "(?:default-opacity|chromium-based-browser|firefox-based-browser)" \}, \{ opacity = ")([0-9.]+) ([0-9.]+)(" \}\))', re.M)
 HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+BORDER_BLOCK = re.compile(r"\n*-- julss-appearance: border-color\n.*?-- /julss-appearance: border-color\n?", re.S)
+BORDER_COLOR = re.compile(r'active_border = "(#[0-9a-fA-F]{6})"')
 
 
 def run(*cmd):
@@ -261,6 +271,43 @@ def theme_bar_alpha():
         return 1.0
 
 
+def theme_border_color():
+    # Primer color del borde activo del tema: "#rrggbb", "rgba(rrggbbaa)" o
+    # un degradado { colors = { ... } }.
+    try:
+        s = (STATE / "theme/hyprland.lua").read_text()
+    except OSError:
+        s = ""
+    m = re.search(r'active_border_color\s*=\s*([^\n]+)', s)
+    if m:
+        c = re.search(r'#([0-9a-fA-F]{6})|rgba?\(([0-9a-fA-F]{6})', m.group(1))
+        if c:
+            return "#" + (c.group(1) or c.group(2)).lower()
+    return palette().get("accent", "#33ccff")
+
+
+def border_color():
+    m = BORDER_BLOCK.search(LOOKNFEEL.read_text()) if LOOKNFEEL.exists() else None
+    c = BORDER_COLOR.search(m.group(0)) if m else None
+    return c.group(1).lower() if c else ""
+
+
+def set_border_color(value):
+    s = LOOKNFEEL.read_text() if LOOKNFEEL.exists() else ""
+    n = BORDER_BLOCK.sub("", s).rstrip("\n") + "\n"
+    if value:
+        n += ("\n-- julss-appearance: border-color\n"
+              "-- Color del borde de la ventana activa (panel Pantalla); gana al del tema.\n"
+              f'hl.config({{ general = {{ col = {{ active_border = "{value}" }} }},\n'
+              f'  group = {{ col = {{ border_active = "{value}" }} }} }})\n'
+              "-- /julss-appearance: border-color\n")
+    if n != s:
+        LOOKNFEEL.write_text(n)
+    # Paneles de la barra, notificaciones, polkit y bloqueo usan este token
+    # (popups.border = "hyprland.active-border" en el shell.toml del tema).
+    toml_set(USER_SHELL, "hyprland", "active-border", f'"{value}"' if value else None)
+
+
 def bar_state():
     try:
         bar = json.loads(SHELL_JSON.read_text()).get("bar", {})
@@ -286,6 +333,8 @@ def bar_state():
         "barColor": custom.lower() if custom and HEX.match(custom) else "",
         "themeBarColor": theme_bar_color(),
         "barSwatches": swatches,
+        "borderColor": border_color(),
+        "themeBorderColor": theme_border_color(),
         "footTransparency": alpha_to_pct(foot_alpha()),
         "winActiveTransparency": alpha_to_pct(window_opacity()[0]),
         "winInactiveTransparency": alpha_to_pct(window_opacity()[1]),
@@ -349,6 +398,14 @@ def set_foot_alpha(alpha):
 
 
 def set_bar(key, value):
+    if key == "border-color":
+        if value == "theme":
+            set_border_color("")
+        elif HEX.match(value):
+            set_border_color(value.lower())
+        else:
+            sys.exit(f"color no válido: {value}")
+        return
     if key == "foot-transparency":
         set_foot_alpha(pct_to_alpha(value))
         return
@@ -418,6 +475,7 @@ def main():
         apply(conf)
         # El color de barra elegido a mano no debe tapar el del tema nuevo.
         toml_set(USER_SHELL, "bar", "background", None)
+        set_border_color("")
     elif cmd == "open-dir" and len(sys.argv) == 3:
         dirs = {"gtk": HOME / ".local/share/themes", "icons": HOME / ".local/share/icons",
                 "cursors": HOME / ".local/share/icons"}
@@ -437,7 +495,7 @@ def main():
         key, value = sys.argv[2], sys.argv[3]
         if key == "theme":
             subprocess.run(["omarchy-theme-set", value])
-        elif key.startswith(("bar-", "foot-", "win-")):
+        elif key.startswith(("bar-", "foot-", "win-", "border-")):
             set_bar(key, value)
         elif key == "bg":
             subprocess.run(["omarchy-theme-bg-set", value])

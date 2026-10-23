@@ -271,6 +271,7 @@ Panel {
     if (key === "bar-transparency") next.barTransparency = Number(value)
     else if (key === "bar-position") next.barPosition = value
     else if (key === "bar-color") next.barColor = value === "theme" ? "" : value
+    else if (key === "border-color") next.borderColor = value === "theme" ? "" : value
     else if (key === "foot-transparency") next.footTransparency = Number(value)
     else if (key === "win-active") next.winActiveTransparency = Number(value)
     else if (key === "win-inactive") next.winInactiveTransparency = Number(value)
@@ -1248,6 +1249,71 @@ Panel {
             TransparencySlider { label: "Terminal foot"; key: "foot-transparency"; stateKey: "footTransparency" }
             TransparencySlider { label: "Ventana activa"; key: "win-active"; stateKey: "winActiveTransparency" }
             TransparencySlider { label: "Ventanas inactivas"; key: "win-inactive"; stateKey: "winInactiveTransparency" }
+
+            Text {
+              textFormat: Text.PlainText
+              text: "Borde activo (ventanas y paneles)"
+              color: Qt.darker(root.bar.foreground, 1.4)
+              font.family: root.bar.fontFamily
+              font.pixelSize: Style.font.caption
+              font.bold: true
+            }
+
+            // Igual que el color de la barra: la «T» es el del tema y al
+            // cambiar de tema vuelve el suyo.
+            Flow {
+              width: parent.width
+              spacing: Style.spacing.xs
+
+              BarSwatch {
+                setKey: "border-color"
+                swatchColor: root.appearance.themeBorderColor || Color.accent
+                isTheme: true
+                selected: !root.appearance.borderColor
+              }
+
+              Repeater {
+                model: root.appearance.barSwatches || []
+
+                BarSwatch {
+                  required property string modelData
+                  setKey: "border-color"
+                  swatchColor: modelData
+                  selected: root.appearance.borderColor === modelData
+                }
+              }
+            }
+
+            Row {
+              width: parent.width
+              spacing: Style.spacing.xs
+
+              TextField {
+                id: borderHexField
+                width: parent.width - borderHexApply.width - parent.spacing
+                placeholderText: "#rrggbb"
+                text: root.appearance.borderColor || ""
+                foreground: root.bar.foreground
+                font.family: root.bar.fontFamily
+                font.pixelSize: Style.font.body
+                onAccepted: borderHexApply.clicked()
+              }
+
+              Button {
+                id: borderHexApply
+                text: "Aplicar"
+                height: borderHexField.height
+                fontSize: Style.font.caption
+                foreground: root.bar.foreground
+                fontFamily: root.bar.fontFamily
+                bordered: true
+                onClicked: {
+                  var hex = String(borderHexField.text || "").trim()
+                  if (hex.charAt(0) !== "#") hex = "#" + hex
+                  if (/^#[0-9a-fA-F]{6}$/.test(hex)) root.setBar("border-color", hex.toLowerCase())
+                }
+              }
+            }
           }
 
           // ---------- Monitors ----------
@@ -1389,6 +1455,7 @@ Panel {
     property string swatchColor: "#000000"
     property bool isTheme: false
     property bool selected: false
+    property string setKey: "bar-color"
 
     width: Style.space(26)
     height: Style.space(26)
@@ -1412,7 +1479,7 @@ Panel {
     MouseArea {
       anchors.fill: parent
       cursorShape: Qt.PointingHandCursor
-      onClicked: root.setBar("bar-color", swatch.isTheme ? "theme" : swatch.swatchColor)
+      onClicked: root.setBar(swatch.setKey, swatch.isTheme ? "theme" : swatch.swatchColor)
     }
   }
 
