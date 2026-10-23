@@ -149,6 +149,11 @@ if [[ $answer == [sS] ]]; then
   # ASPM L1 on the Thunderbolt 2 link, at boot and after resume
   sudo systemctl daemon-reload
   sudo systemctl enable --now thunderbolt-aspm.service
+  # julss.fan calls julss-fan-apply with sudo -n: allow just that helper
+  rule=$(mktemp)
+  echo "$USER ALL=(root) NOPASSWD: /usr/local/bin/julss-fan-apply" > "$rule"
+  sudo visudo -cf "$rule" && sudo install -m 440 -o root -g root "$rule" /etc/sudoers.d/julss-fan
+  rm -f "$rule"
   echo "Los woofers (patch HDA) se activan tras reiniciar."
 fi
 

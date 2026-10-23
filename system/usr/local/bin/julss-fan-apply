@@ -1,0 +1,70 @@
+#!/bin/bash
+# julss-fan-apply — escribe /etc/mbpfan.conf y reinicia mbpfan.
+# Lo llama el panel julss.fan con sudo sin contraseña (regla en
+# /etc/sudoers.d/julss-fan), así que solo acepta números validados:
+#
+#   julss-fan-apply LOW HIGH MAX MIN_RPM MAX_RPM INTERVAL
+#   julss-fan-apply restart      (solo reinicia el servicio)
+#
+# Curva de mbpfan: por debajo de LOW el ventilador va al mínimo; al calentarse
+# empieza a subir por encima de HIGH y llega al máximo en MAX; al enfriarse
+# baja desde el máximo y vuelve al mínimo al llegar a LOW.
+set -euo pipefail
+
+conf=/etc/mbpfan.conf
+
+restart() {
+  systemctl reset-failed mbpfan.service 2>/dev/null || true
+  systemctl restart mbpfan.service
+}
+
+if [[ $# -eq 1 && $1 == restart ]]; then
+  restart
+  exit 0
+fi
+
+if [[ $# -ne 6 ]]; then
+  echo "uso: julss-fan-apply LOW HIGH MAX MIN_RPM MAX_RPM INTERVAL | restart" >&2
+  exit 2
+fi
+
+for v in "$@"; do
+  [[ $v =~ ^[0-9]{1,5}$ ]] || { echo "valor no válido: $v" >&2; exit 2; }
+done
+
+low=$((10#$1)) high=$((10#$2)) max=$((10#$3))
+min_rpm=$((10#$4)) max_rpm=$((10#$5)) interval=$((10#$6))
+
+fail() { echo "$1" >&2; exit 2; }
+(( low >= 30 && max <= 95 )) || fail "temperaturas fuera de 30–95 °C"
+(( low < high && high < max )) || fail "tiene que ser baja < alta < máxima"
+(( min_rpm >= 1000 && max_rpm <= 6500 )) || fail "velocidades fuera de 1000–6500 rpm"
+(( min_rpm < max_rpm )) || fail "la velocidad mínima tiene que ser menor que la máxima"
+(( interval >= 1 && interval <= 10 )) || fail "intervalo fuera de 1–10 s"
+
+tmp=$(mktemp /etc/.mbpfan.conf.XXXXXX)
+trap 'rm -f "$tmp"' EXIT
+cat > "$tmp" <<EOF
+[general]
+# Generado por julss-fan-apply (panel Ventilador de la barra) el $(date '+%F %T').
+# Se puede editar a mano; el panel lo vuelve a leer al abrirse.
+#
+# Velocidades en rpm (fan1 = el único ventilador de este MacBook).
+min_fan1_speed = $min_rpm
+max_fan1_speed = $max_rpm
+
+# Temperaturas en °C (la más alta de los sensores de coretemp):
+#   por debajo de low_temp  -> velocidad mínima
+#   por encima de high_temp -> sube a escalones cada vez mayores
+#   en max_temp o más       -> velocidad máxima
+#   al enfriarse baja desde el máximo hasta el mínimo en low_temp
+low_temp = $low
+high_temp = $high
+max_temp = $max
+polling_interval = $interval
+EOF
+chmod 644 "$tmp"
+mv "$tmp" "$conf"
+trap - EXIT
+
+restart

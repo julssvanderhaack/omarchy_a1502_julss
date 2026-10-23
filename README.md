@@ -58,6 +58,7 @@ system/                         # Ficheros de sistema (install.sh pregunta antes
 ├── usr/local/bin/facetimehd-aspm-set.sh             # Ajusta ASPM en el enlace PCIe de la webcam
 ├── usr/local/bin/facetimehd-camera-off.sh           # Webcam: descarga el driver y reactiva ASPM
 ├── usr/local/bin/facetimehd-camera-on.sh            # Webcam: carga el driver y desactiva ASPM
+├── usr/local/bin/julss-fan-apply                   # Aplica la curva de julss.fan a /etc/mbpfan.conf y reinicia mbpfan (install.sh añade la regla sudo sin contraseña)
 ├── usr/local/bin/julss-wifi-resume-check            # Comprueba/recupera la wifi tras despertar
 └── usr/local/bin/thunderbolt-aspm                   # Activa ASPM L1 en el enlace del Thunderbolt 2
 ```
