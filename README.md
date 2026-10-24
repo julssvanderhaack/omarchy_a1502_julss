@@ -92,20 +92,23 @@ yay -S blesh-git
 
 ## Wifi al despertar (BCM43602)
 
-El firmware del BCM43602 a menudo vuelve colgado de la suspensión (S3), así que
-el hook `julss-wifi-resume` descarga `brcmfmac` (y `brcmfmac_wcc`) antes de
-suspender y, al despertar, hace un reset PCI de la tarjeta y lo carga limpio.
+La tarjeta BCM43602 no aguanta bien la suspensión (S3): con el driver cargado el
+firmware suele volver colgado, y dejando el dispositivo en su sitio una vez
+volvió «fuera del bus» (`Unable to change power state from unknown to D0`). Por
+eso el hook `julss-wifi-resume` la saca del todo antes de suspender (descarga
+`brcmfmac_wcc` y `brcmfmac` y quita el dispositivo PCI) y al despertar la vuelve
+a detectar desde cero (rescan del puerto 00:1c.2 + `modprobe brcmfmac`).
 
-Además, al volver a veces el primer intento de conexión caduca. `julss-wifi-resume-check` espera 30 s; si la wifi no
-ha vuelto (y está encendida y hay una red guardada al alcance), reinicia la radio
-y, si aun así no conecta, resetea la tarjeta: descarga el driver (primero
-`brcmfmac_wcc`, que lo mantiene «en uso»), hace un reset PCI del dispositivo y lo
-vuelve a cargar; si el driver no se deja descargar, quita el dispositivo del bus
-PCI y lo redescubre. Si el log del kernel muestra el firmware colgado
-(`brcmf_msgbuf_query_dcmd: Timeout`, `Failed to reserve space in commonring`) se
-salta el reinicio de radio, que en ese caso no sirve. Lo instala `install.sh` (parte de
-ficheros de sistema). Si el escaneo no ve ninguna red, lo trata como wifi rota
-(es lo que pasa cuando el driver se queda sordo), no como «no hay redes».
+Después, `julss-wifi-resume-check` comprueba que la wifi vuelve. Si la tarjeta no
+está en el bus o no tiene driver, o el log del kernel muestra el firmware colgado
+(`brcmf_msgbuf_query_dcmd: Timeout`, `Failed to reserve space in commonring`), va
+directo a resetear la tarjeta. Si no, espera 30 s; si la wifi no ha vuelto (y está
+encendida y hay una red guardada al alcance), reinicia la radio y, si aun así no
+conecta, resetea la tarjeta: descarga el driver, quita el dispositivo, hace un
+reset de bus secundario desde el puerto raíz (`setpci` BRIDGE_CONTROL bit 6),
+redescubre el dispositivo (hasta 3 intentos) y carga el driver. Si el escaneo no
+ve ninguna red, lo trata como wifi rota, no como «no hay redes». Lo instala
+`install.sh` (parte de ficheros de sistema).
 
 Si aun así no vuelve, el botón ↻ tenue del panel Wi-Fi (`julss.network`, junto
 al QR) lanza `pkexec julss-wifi-resume-check --force`: sin esperar ni

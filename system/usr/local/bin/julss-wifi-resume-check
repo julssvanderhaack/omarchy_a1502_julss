@@ -3,12 +3,18 @@
 # On resume brcmfmac reloads the BCM43602 firmware and the first association
 # sometimes times out. NetworkManager usually recovers on its own retry; if it
 # hasn't after a grace period, bounce the radio, and as a last resort reset the
-# card: unload the driver, PCI-reset the device and load it again. Does nothing
-# if wifi is switched off or no saved network is in range.
+# card. Does nothing if wifi is switched off or no saved network is in range.
 #
-# Sometimes the firmware itself is hung after resume (kernel log full of
-# "brcmf_msgbuf_query_dcmd: Timeout" / "Failed to reserve space in commonring").
-# Bouncing the radio can't fix that, so it goes straight to the card reset.
+# Two broken states skip straight to the card reset, since a radio bounce can't
+# fix either:
+# - firmware hung: kernel log full of "brcmf_msgbuf_query_dcmd: Timeout" /
+#   "Failed to reserve space in commonring";
+# - card gone from the bus: config space reads 0xffff ("Unable to change power
+#   state from unknown to D0, device inaccessible", "MMIO read failed").
+#
+# The card reset unloads the driver, drops the device, does a secondary bus
+# reset from its root port and rescans, so the card is enumerated from scratch
+# (fresh BARs and config) before the driver loads again.
 #
 # --force (the wifi panel's restart button): skip the grace period and the
 # in-range check and go straight to bouncing the radio, then the card reset.
@@ -16,7 +22,9 @@
 set -u
 
 IFACE=wlp3s0
-PCIDEV=/sys/bus/pci/devices/0000:03:00.0
+CARD=0000:03:00.0
+BRIDGE=0000:00:1c.2
+PCIDEV=/sys/bus/pci/devices/$CARD
 GRACE=30
 FORCE=0
 [[ ${1:-} == --force ]] && FORCE=1
@@ -42,6 +50,14 @@ wait_connected() {
     sleep 1
   done
   return 1
+}
+
+card_on_bus() {
+  [[ $(setpci -s "$CARD" VENDOR_ID.w 2>/dev/null) == 14e4 ]]
+}
+
+card_working() {
+  card_on_bus && [[ -e $PCIDEV/driver && -e /sys/class/net/$IFACE ]]
 }
 
 firmware_hung() {
@@ -70,22 +86,31 @@ restart_radio() {
   timeout 30 nmcli radio wifi on
 }
 
-# brcmfmac_wcc (vendor module) holds a reference on brcmfmac, so a plain
-# `modprobe -r brcmfmac` fails with "Module brcmfmac is in use". Reloading
-# alone also leaves a hung firmware hung, hence the PCI reset in between.
+# Pulse Secondary Bus Reset (bridge control bit 6) on the card's root port.
+bus_reset() {
+  local bc
+  bc=$(setpci -s "$BRIDGE" BRIDGE_CONTROL.w) || return
+  setpci -s "$BRIDGE" BRIDGE_CONTROL.w="$(printf %04x $((0x$bc | 0x40)))"
+  sleep 0.2
+  setpci -s "$BRIDGE" BRIDGE_CONTROL.w="$bc"
+  sleep 1
+}
+
+# brcmfmac_wcc (vendor module) holds a reference on brcmfmac, so it has to be
+# unloaded first or modprobe fails with "Module brcmfmac is in use".
 reset_card() {
-  if timeout 90 modprobe -r brcmfmac_wcc brcmfmac; then
-    [[ -w $PCIDEV/reset ]] && echo 1 >"$PCIDEV/reset"
+  local try
+  timeout 90 modprobe -r brcmfmac_wcc brcmfmac || echo "Driver unload failed"
+  for try in 1 2 3; do
+    [[ -e $PCIDEV ]] && echo 1 >"$PCIDEV/remove"
+    bus_reset
+    echo 1 >"/sys/bus/pci/devices/$BRIDGE/rescan"
     sleep 1
-    modprobe brcmfmac
-  else
-    # Driver wouldn't unload: drop the device from the bus and rediscover it,
-    # which also re-probes the driver from scratch.
-    echo "Driver unload failed, removing and rescanning the PCI device"
-    echo 1 >"$PCIDEV/remove"
-    sleep 2
-    echo 1 >/sys/bus/pci/rescan
-  fi
+    card_on_bus && break
+    echo "Card not back on the bus (try $try)"
+  done
+  modprobe brcmfmac
+  card_on_bus
 }
 
 if [[ -n ${WAITED:-} ]] && connected; then
@@ -95,7 +120,12 @@ fi
 
 if (( FORCE )); then
   echo "Restart requested"
-else
+elif ! card_working; then
+  # Give the resume hook's driver load a moment before calling it broken.
+  sleep 5
+fi
+
+if ! (( FORCE )) && card_working; then
   if wait_connected; then
     echo "Wifi reconnected on its own"
     exit 0
@@ -114,7 +144,9 @@ else
   echo "Not connected after ${GRACE}s"
 fi
 
-if firmware_hung; then
+if ! card_working; then
+  echo "Card is not on the bus or has no driver, skipping the radio restart"
+elif firmware_hung; then
   echo "Firmware is not responding, skipping the radio restart"
 else
   echo "Restarting the wifi radio"
@@ -125,8 +157,8 @@ else
   fi
 fi
 
-echo "Resetting the wifi card (driver unload, PCI reset, reload)"
-reset_card
+echo "Resetting the wifi card (driver unload, bus reset, rescan, reload)"
+reset_card || echo "Card still not answering on the bus"
 # Firmware load + association took ~12 s at boot; leave room for it.
 if wait_connected 60; then
   echo "Wifi reconnected after resetting the card"

@@ -1,16 +1,19 @@
 #!/bin/bash
 
-# The BCM43602 firmware often comes back hung from S3 (brcmf_msgbuf_query_dcmd
-# timeouts) and only a card reset revives it. So don't suspend with it loaded:
-# unload brcmfmac before sleeping, PCI-reset the card and load it fresh after.
+# The BCM43602 doesn't survive S3 well: with the driver loaded the firmware
+# often comes back hung, and with the device left in place it once came back
+# off the bus ("Unable to change power state from unknown to D0"). So take it
+# out completely before sleeping (unload the driver, remove the PCI device) and
+# rediscover it on resume, which enumerates it and loads brcmfmac from scratch.
 # brcmfmac_wcc holds a reference on brcmfmac, so it has to go first.
 #
-# After resume, a check still makes sure the wifi comes back. It runs as a
-# detached transient unit so it never delays waking up;
-# logs: journalctl -u julss-wifi-resume-check
+# After resume a check makes sure the wifi comes back, resetting the card if
+# the rescan didn't find it. It runs as a detached transient unit so it never
+# delays waking up; logs: journalctl -u julss-wifi-resume-check
 
 unit=julss-wifi-resume-check
 pcidev=/sys/bus/pci/devices/0000:03:00.0
+bridge=/sys/bus/pci/devices/0000:00:1c.2
 
 # Stop a check still running from a previous resume (also before suspending).
 systemctl stop "$unit.service" >/dev/null 2>&1
@@ -18,12 +21,11 @@ systemctl stop "$unit.service" >/dev/null 2>&1
 case $1 in
   pre)
     timeout 20 modprobe -r brcmfmac_wcc brcmfmac
+    [[ -e $pcidev ]] && echo 1 >"$pcidev/remove"
     ;;
   post)
-    if ! lsmod | grep -q '^brcmfmac '; then
-      [[ -w $pcidev/reset ]] && echo 1 >"$pcidev/reset"
-      modprobe brcmfmac
-    fi
+    echo 1 >"$bridge/rescan"
+    modprobe brcmfmac
     systemd-run --no-block --collect --unit="$unit" /usr/local/bin/julss-wifi-resume-check
     ;;
 esac
