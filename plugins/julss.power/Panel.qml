@@ -389,13 +389,24 @@ Panel {
     // With the percentage shown, only the icon takes the level colour: the
     // two are drawn as separate texts instead of the single glyph string.
     iconComponent: (root.showPercentage && !vertical) || root.batteryCritical ? percentAndIcon : null
-    slotSize: Style.bar.iconSlot * (root.showPercentage && !vertical ? 2 : 1) - Style.space(4)  // julss: más junto
+    // julss: más junto, pero crece si el texto no cabe (con «100%» se salía
+    // de la ranura y se pegaba al widget de la izquierda).
+    slotSize: root.showPercentage && !vertical
+      ? Math.max(Style.bar.iconSlot * 2 - Style.space(4), percentMetrics.width + Style.space(10))
+      : Style.bar.iconSlot - Style.space(4)
     tooltipText: ""
     onPressed: function(b) {
       if (!root.batteryPresent) return
       if (b === Qt.RightButton) root.togglePercentage()
       else root.toggle()
     }
+  }
+
+  TextMetrics {
+    id: percentMetrics
+    text: root.batteryIcon() + " " + root.batteryPercent + "%"
+    font.family: button.fontFamily
+    font.pixelSize: button.fontSize
   }
 
   Component {
