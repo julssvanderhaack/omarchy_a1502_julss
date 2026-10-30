@@ -1,0 +1,777 @@
+#!/usr/bin/env python3
+"""julss-agenda — agenda local sincronizada en los dos sentidos con Google Calendar.
+
+Lo usa el panel del reloj (julss.clock) y un timer de systemd del usuario.
+Solo librería estándar.
+
+  julss-agenda auth                 conectar con Google (abre el navegador)
+  julss-agenda logout               olvidar el token
+  julss-agenda sync                 subir cambios pendientes y bajar los de Google
+  julss-agenda tick                 recordatorios + sync si hace >= 5 min (timer)
+  julss-agenda add    --title T --date AAAA-MM-DD [--start HH:MM --end HH:MM | --all-day] ...
+  julss-agenda update ID [--title ...] [--date ...] ...
+  julss-agenda delete ID
+  julss-agenda status
+
+Ficheros:
+  ~/.config/julss-agenda/client_secret.json  cliente OAuth "App de escritorio" (Google Cloud)
+  ~/.config/julss-agenda/token.json          refresh token (0600)
+  ~/.config/julss-agenda/config.json         opcional: {"remindMinutes": 10, "syncMinutes": 5}
+  ~/.local/state/julss-agenda/events.json    lo que pinta el panel
+  ~/.local/state/julss-agenda/remote.json    última copia de Google
+  ~/.local/state/julss-agenda/pending.json   cambios hechos aquí que aún no han subido
+
+Google es la fuente de verdad: cada sync sube la cola en orden y luego baja
+la ventana completa (−60 d … +400 d) de todos los calendarios visibles, así
+que lo que se borre o cambie allí desaparece o cambia aquí sin más.
+"""
+
+import argparse
+import base64
+import datetime as dt
+import fcntl
+import hashlib
+import http.server
+import json
+import os
+import secrets
+import socket
+import subprocess
+import sys
+import threading
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+
+HOME = os.path.expanduser("~")
+CONF_DIR = os.path.join(HOME, ".config", "julss-agenda")
+STATE_DIR = os.path.join(HOME, ".local", "state", "julss-agenda")
+CLIENT_FILE = os.path.join(CONF_DIR, "client_secret.json")
+TOKEN_FILE = os.path.join(CONF_DIR, "token.json")
+CONFIG_FILE = os.path.join(CONF_DIR, "config.json")
+EVENTS_FILE = os.path.join(STATE_DIR, "events.json")
+REMOTE_FILE = os.path.join(STATE_DIR, "remote.json")
+PENDING_FILE = os.path.join(STATE_DIR, "pending.json")
+META_FILE = os.path.join(STATE_DIR, "meta.json")
+NOTIFIED_FILE = os.path.join(STATE_DIR, "notified.json")
+LOCK_FILE = os.path.join(STATE_DIR, "lock")
+
+SCOPES = "https://www.googleapis.com/auth/calendar"
+API = "https://www.googleapis.com/calendar/v3"
+TOKEN_URL = "https://oauth2.googleapis.com/token"
+AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+PAST_DAYS = 60
+FUTURE_DAYS = 400
+LOCAL_COLOR = "#7aa2f7"
+
+
+# --------------------------------------------------------------------- util
+
+def read_json(path, default):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return default
+
+
+def write_json(path, data, private=False):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(data, f, ensure_ascii=False, indent=1)
+    if private:
+        os.chmod(tmp, 0o600)
+    os.replace(tmp, path)
+
+
+def config():
+    c = {"remindMinutes": 10, "syncMinutes": 5}
+    c.update(read_json(CONFIG_FILE, {}))
+    return c
+
+
+def now_iso():
+    return dt.datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+def local_tz_name():
+    try:
+        link = os.readlink("/etc/localtime")
+        return link.split("zoneinfo/", 1)[1]
+    except (OSError, IndexError):
+        return None
+
+
+class Lock:
+    def __enter__(self):
+        os.makedirs(STATE_DIR, exist_ok=True)
+        self.f = open(LOCK_FILE, "w")
+        fcntl.flock(self.f, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *a):
+        fcntl.flock(self.f, fcntl.LOCK_UN)
+        self.f.close()
+
+
+class NetError(Exception):
+    """Sin red o Google caído: reintentar más tarde."""
+
+
+class ApiError(Exception):
+    def __init__(self, code, msg):
+        super().__init__(msg)
+        self.code = code
+
+
+class AuthError(Exception):
+    """El token ya no vale: hay que volver a conectar."""
+
+
+# --------------------------------------------------------------------- OAuth
+
+def client():
+    data = read_json(CLIENT_FILE, None)
+    if not data:
+        return None
+    return data.get("installed") or data.get("web")
+
+
+def http_post_form(url, fields):
+    body = urllib.parse.urlencode(fields).encode()
+    req = urllib.request.Request(url, data=body, method="POST")
+    req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    try:
+        with urllib.request.urlopen(req, timeout=20) as r:
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        try:
+            err = json.load(e)
+        except ValueError:
+            err = {}
+        if err.get("error") in ("invalid_grant", "unauthorized_client", "invalid_client"):
+            raise AuthError(err.get("error_description") or err["error"])
+        raise ApiError(e.code, str(err) or str(e))
+    except (urllib.error.URLError, socket.timeout, OSError) as e:
+        raise NetError(str(e))
+
+
+def access_token():
+    tok = read_json(TOKEN_FILE, None)
+    c = client()
+    if not tok or not c or not tok.get("refresh_token"):
+        raise AuthError("sin conectar")
+    if tok.get("access_token") and tok.get("expires_at", 0) > time.time() + 60:
+        return tok["access_token"]
+    r = http_post_form(TOKEN_URL, {
+        "client_id": c["client_id"],
+        "client_secret": c.get("client_secret", ""),
+        "refresh_token": tok["refresh_token"],
+        "grant_type": "refresh_token",
+    })
+    tok["access_token"] = r["access_token"]
+    tok["expires_at"] = time.time() + int(r.get("expires_in", 3600))
+    write_json(TOKEN_FILE, tok, private=True)
+    return tok["access_token"]
+
+
+def cmd_auth(args):
+    c = client()
+    if not c:
+        print("Falta " + CLIENT_FILE + "\n"
+              "Créalo en console.cloud.google.com → APIs y servicios → Credenciales →\n"
+              "Crear ID de cliente OAuth → Aplicación de escritorio → Descargar JSON.",
+              file=sys.stderr)
+        return 2
+
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(48)).rstrip(b"=").decode()
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    state = secrets.token_urlsafe(16)
+    result = {}
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self):
+            q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+            if q.get("state", [""])[0] != state:
+                self.send_response(400)
+                self.end_headers()
+                return
+            result["code"] = q.get("code", [None])[0]
+            result["error"] = q.get("error", [None])[0]
+            ok = bool(result["code"])
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.end_headers()
+            msg = ("Agenda conectada con Google. Ya puedes cerrar esta pestaña."
+                   if ok else "No se ha podido conectar: " + str(result["error"]))
+            self.wfile.write(("<html><body style='font-family:sans-serif;padding:3em'>"
+                              "<h2>" + msg + "</h2></body></html>").encode())
+
+        def log_message(self, *a):
+            pass
+
+    srv = http.server.HTTPServer(("127.0.0.1", 0), Handler)
+    redirect = "http://127.0.0.1:%d" % srv.server_port
+    url = AUTH_URL + "?" + urllib.parse.urlencode({
+        "client_id": c["client_id"],
+        "redirect_uri": redirect,
+        "response_type": "code",
+        "scope": SCOPES,
+        "access_type": "offline",
+        "prompt": "consent",
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "state": state,
+    })
+    print("Abriendo el navegador… si no se abre, visita:\n" + url, flush=True)
+    subprocess.Popen(["xdg-open", url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    deadline = time.time() + 300
+    srv.timeout = 5
+    while "code" not in result and time.time() < deadline:
+        srv.handle_request()
+    srv.server_close()
+    if not result.get("code"):
+        print("No se ha completado la autorización.", file=sys.stderr)
+        return 1
+
+    r = http_post_form(TOKEN_URL, {
+        "client_id": c["client_id"],
+        "client_secret": c.get("client_secret", ""),
+        "code": result["code"],
+        "code_verifier": verifier,
+        "redirect_uri": redirect,
+        "grant_type": "authorization_code",
+    })
+    if not r.get("refresh_token"):
+        print("Google no ha devuelto refresh token.", file=sys.stderr)
+        return 1
+    write_json(TOKEN_FILE, {
+        "refresh_token": r["refresh_token"],
+        "access_token": r.get("access_token"),
+        "expires_at": time.time() + int(r.get("expires_in", 3600)),
+    }, private=True)
+    print("Conectado. Sincronizando…")
+    return cmd_sync(args)
+
+
+def cmd_logout(args):
+    with Lock():
+        try:
+            os.remove(TOKEN_FILE)
+        except OSError:
+            pass
+        # Los eventos de Google ya no son nuestros; lo pendiente se queda.
+        write_json(REMOTE_FILE, {"calendars": [], "events": []})
+        rebuild()
+    return 0
+
+
+# --------------------------------------------------------------------- API
+
+def api(method, path, params=None, body=None):
+    url = API + path
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    data = json.dumps(body).encode() if body is not None else None
+    for attempt in (0, 1):
+        req = urllib.request.Request(url, data=data, method=method)
+        req.add_header("Authorization", "Bearer " + access_token())
+        if data is not None:
+            req.add_header("Content-Type", "application/json")
+        try:
+            with urllib.request.urlopen(req, timeout=30) as r:
+                raw = r.read()
+                return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as e:
+            if e.code == 401 and attempt == 0:
+                tok = read_json(TOKEN_FILE, {})
+                tok["expires_at"] = 0
+                write_json(TOKEN_FILE, tok, private=True)
+                continue
+            if e.code in (429,) or e.code >= 500:
+                raise NetError("Google %d" % e.code)
+            try:
+                msg = json.load(e).get("error", {}).get("message", str(e))
+            except ValueError:
+                msg = str(e)
+            raise ApiError(e.code, msg)
+        except (urllib.error.URLError, socket.timeout, OSError) as e:
+            raise NetError(str(e))
+
+
+def q(cal):
+    return urllib.parse.quote(cal, safe="")
+
+
+# --------------------------------------------------------------------- modelo
+#
+# Evento normalizado:
+#   {id, cal, title, location, notes, allDay, start, end, recurring, writable}
+#   start/end: "AAAA-MM-DD" (todo el día; end exclusivo, como Google) o
+#              "AAAA-MM-DDTHH:MM" en hora local.
+
+def from_google(item, cal):
+    s, e = item.get("start", {}), item.get("end", {})
+    all_day = "date" in s
+    if all_day:
+        start, end = s["date"], e.get("date", s["date"])
+    else:
+        start = dt.datetime.fromisoformat(s["dateTime"]).astimezone().strftime("%Y-%m-%dT%H:%M")
+        end = dt.datetime.fromisoformat(e.get("dateTime", s["dateTime"])).astimezone().strftime("%Y-%m-%dT%H:%M")
+    return {
+        "id": item["id"],
+        "cal": cal["id"],
+        "title": item.get("summary") or "(sin título)",
+        "location": item.get("location", ""),
+        "notes": item.get("description", ""),
+        "allDay": all_day,
+        "start": start,
+        "end": end,
+        "recurring": bool(item.get("recurringEventId")),
+        "writable": cal.get("writable", False),
+        "link": item.get("htmlLink", ""),
+    }
+
+
+def to_google(ev, partial=False):
+    body = {}
+    for k, g in (("title", "summary"), ("location", "location"), ("notes", "description")):
+        if k in ev:
+            body[g] = ev[k]
+    if "start" in ev or not partial:
+        tz = local_tz_name()
+        if ev.get("allDay"):
+            body["start"] = {"date": ev["start"], "dateTime": None}
+            body["end"] = {"date": ev["end"], "dateTime": None}
+        else:
+            def stamp(v):
+                return dt.datetime.strptime(v, "%Y-%m-%dT%H:%M").astimezone().isoformat()
+            body["start"] = {"dateTime": stamp(ev["start"]), "date": None}
+            body["end"] = {"dateTime": stamp(ev["end"]), "date": None}
+            if tz:
+                body["start"]["timeZone"] = body["end"]["timeZone"] = tz
+        if not partial:
+            for k in ("start", "end"):
+                body[k] = {a: b for a, b in body[k].items() if b is not None}
+    return body
+
+
+def day_keys(ev):
+    if ev["allDay"]:
+        d0 = dt.date.fromisoformat(ev["start"])
+        d1 = dt.date.fromisoformat(ev["end"]) - dt.timedelta(days=1)
+    else:
+        a = dt.datetime.strptime(ev["start"], "%Y-%m-%dT%H:%M")
+        b = dt.datetime.strptime(ev["end"], "%Y-%m-%dT%H:%M")
+        d0 = a.date()
+        # Algo que acaba justo a medianoche no ocupa el día siguiente.
+        d1 = (b - dt.timedelta(minutes=1)).date() if b > a else d0
+    d1 = max(d0, min(d1, d0 + dt.timedelta(days=62)))
+    out, d = [], d0
+    while d <= d1:
+        out.append(d.isoformat())
+        d += dt.timedelta(days=1)
+    return out
+
+
+def time_label(ev):
+    if ev["allDay"]:
+        return "Todo el día"
+    a, b = ev["start"][11:16], ev["end"][11:16]
+    if ev["start"][:10] != ev["end"][:10]:
+        return a + "–" + b + "+"
+    return a if a == b else a + "–" + b
+
+
+def pending_ops():
+    return read_json(PENDING_FILE, [])
+
+
+def apply_pending(events, ops):
+    by_id = {e["id"]: dict(e) for e in events}
+    order = [e["id"] for e in events]
+    pending_ids = set()
+    for op in ops:
+        if op["op"] == "create":
+            ev = dict(op["event"])
+            ev.setdefault("recurring", False)
+            ev["writable"] = True
+            by_id[ev["id"]] = ev
+            order.append(ev["id"])
+            pending_ids.add(ev["id"])
+        elif op["op"] == "update" and op["id"] in by_id:
+            by_id[op["id"]].update(op["fields"])
+            pending_ids.add(op["id"])
+        elif op["op"] == "delete":
+            by_id.pop(op["id"], None)
+    return [dict(by_id[i], pending=i in pending_ids) for i in order if i in by_id]
+
+
+def rebuild(error=None, keep_error=False):
+    """Escribe events.json (lo que lee el panel) a partir de remote + pending."""
+    remote = read_json(REMOTE_FILE, {"calendars": [], "events": []})
+    meta = read_json(META_FILE, {})
+    if keep_error:
+        error = meta.get("error")
+    meta["error"] = error
+    write_json(META_FILE, meta)
+
+    cals = {c["id"]: c for c in remote.get("calendars", [])}
+    primary = next((c for c in cals.values() if c.get("primary")), None)
+    out = []
+    for ev in apply_pending(remote.get("events", []), pending_ops()):
+        cal = cals.get(ev.get("cal")) or primary or {}
+        ev["color"] = cal.get("color", LOCAL_COLOR)
+        ev["calName"] = cal.get("name", "Local")
+        ev["days"] = day_keys(ev)
+        ev["time"] = time_label(ev)
+        out.append(ev)
+    out.sort(key=lambda e: (not e["allDay"], e["start"], e["title"].lower()))
+
+    write_json(EVENTS_FILE, {
+        "updated": now_iso(),
+        "lastSync": meta.get("lastSync"),
+        "error": error,
+        "google": {
+            "configured": client() is not None,
+            "connected": os.path.exists(TOKEN_FILE),
+        },
+        "pending": len(pending_ops()),
+        "calendars": [{"id": c["id"], "name": c["name"], "color": c["color"],
+                       "writable": c.get("writable", False), "primary": c.get("primary", False)}
+                      for c in cals.values()],
+        "events": out,
+    })
+
+
+# --------------------------------------------------------------------- sync
+
+def flush(remote):
+    """Sube la cola en orden. Para en el primer fallo de red; descarta los
+    cambios que Google rechaza de forma definitiva (y lo cuenta)."""
+    ops = pending_ops()
+    primary = next((c["id"] for c in remote.get("calendars", []) if c.get("primary")), "primary")
+    rejected = []
+    while ops:
+        op = ops[0]
+        try:
+            if op["op"] == "create":
+                ev = op["event"]
+                cal = ev.get("cal") or primary
+                if cal == "local":
+                    cal = primary
+                made = api("POST", "/calendars/%s/events" % q(cal), body=to_google(ev))
+                # Lo que venga detrás apuntando al id local pasa al de Google.
+                for later in ops[1:]:
+                    if later.get("id") == ev["id"]:
+                        later["id"] = made["id"]
+                        later["cal"] = cal
+            elif op["op"] == "update":
+                api("PATCH", "/calendars/%s/events/%s" % (q(op["cal"]), q(op["id"])),
+                    body=to_google(op["fields"], partial=True))
+            elif op["op"] == "delete":
+                try:
+                    api("DELETE", "/calendars/%s/events/%s" % (q(op["cal"]), q(op["id"])))
+                except ApiError as e:
+                    if e.code not in (404, 410):
+                        raise
+        except ApiError as e:
+            rejected.append("%s: %s" % (op.get("event", {}).get("title") or op["op"], e))
+        ops.pop(0)
+        write_json(PENDING_FILE, ops)
+    return rejected
+
+
+def fetch():
+    cl = api("GET", "/users/me/calendarList", {"minAccessRole": "reader", "maxResults": 250})
+    cals = []
+    for c in cl.get("items", []):
+        if c.get("hidden") or not (c.get("selected") or c.get("primary")):
+            continue
+        cals.append({
+            "id": c["id"],
+            "name": c.get("summaryOverride") or c.get("summary") or c["id"],
+            "color": c.get("backgroundColor", LOCAL_COLOR),
+            "writable": c.get("accessRole") in ("owner", "writer"),
+            "primary": bool(c.get("primary")),
+        })
+    today = dt.datetime.now().astimezone().replace(hour=0, minute=0, second=0, microsecond=0)
+    t_min = (today - dt.timedelta(days=PAST_DAYS)).isoformat()
+    t_max = (today + dt.timedelta(days=FUTURE_DAYS)).isoformat()
+    events = []
+    for cal in cals:
+        token = None
+        while True:
+            params = {
+                "singleEvents": "true", "orderBy": "startTime", "maxResults": 2500,
+                "timeMin": t_min, "timeMax": t_max,
+                "fields": "nextPageToken,items(id,status,summary,location,description,"
+                          "start,end,recurringEventId,htmlLink,attendees(self,responseStatus))",
+            }
+            if token:
+                params["pageToken"] = token
+            r = api("GET", "/calendars/%s/events" % q(cal["id"]), params)
+            for it in r.get("items", []):
+                if it.get("status") == "cancelled":
+                    continue
+                if any(a.get("self") and a.get("responseStatus") == "declined" for a in it.get("attendees", [])):
+                    continue
+                events.append(from_google(it, cal))
+            token = r.get("nextPageToken")
+            if not token:
+                break
+    return {"calendars": cals, "events": events}
+
+
+def sync_locked():
+    meta = read_json(META_FILE, {})
+    meta["lastAttempt"] = time.time()
+    write_json(META_FILE, meta)
+    if not client() or not os.path.exists(TOKEN_FILE):
+        rebuild(None)
+        return 0
+    try:
+        remote = read_json(REMOTE_FILE, {"calendars": [], "events": []})
+        rejected = flush(remote)
+        remote = fetch()
+        write_json(REMOTE_FILE, remote)
+        meta = read_json(META_FILE, {})
+        meta["lastSync"] = now_iso()
+        write_json(META_FILE, meta)
+        rebuild("Google ha rechazado: " + "; ".join(rejected) if rejected else None)
+        return 0
+    except NetError:
+        rebuild("Sin conexión con Google; se reintentará")
+        return 1
+    except AuthError:
+        rebuild("Hay que volver a conectar con Google")
+        return 1
+    except ApiError as e:
+        rebuild("Google: %s" % e)
+        return 1
+
+
+def cmd_sync(args):
+    with Lock():
+        return sync_locked()
+
+
+# --------------------------------------------------------------------- edición
+
+def norm_fields(a, base=None):
+    """Convierte los argumentos de add/update en campos de evento normalizado."""
+    f = {}
+    if a.title is not None:
+        f["title"] = a.title.strip() or "(sin título)"
+    if a.location is not None:
+        f["location"] = a.location
+    if a.notes is not None:
+        f["notes"] = a.notes
+    when = any(x is not None for x in (a.date, a.start, a.end, a.end_date)) or a.all_day
+    if when:
+        b = base or {}
+        if a.all_day:
+            all_day = True
+        elif a.start is not None or a.end is not None:
+            all_day = False
+        else:
+            all_day = b.get("allDay", True)
+        date = a.date or b.get("start", "")[:10] or dt.date.today().isoformat()
+        dt.date.fromisoformat(date)
+        end_date = a.end_date or date
+        if all_day:
+            last = max(dt.date.fromisoformat(end_date), dt.date.fromisoformat(date))
+            f.update(allDay=True, start=date, end=(last + dt.timedelta(days=1)).isoformat())
+        else:
+            keep = b and not b.get("allDay")
+            st = a.start or (b["start"][11:16] if keep else "09:00")
+            s_dt = dt.datetime.strptime(date + "T" + st, "%Y-%m-%dT%H:%M")
+            if a.end:
+                e_dt = dt.datetime.strptime(end_date + "T" + a.end, "%Y-%m-%dT%H:%M")
+                if e_dt <= s_dt and a.end_date is None:
+                    e_dt += dt.timedelta(days=1)  # 23:00–01:00
+                e_dt = max(e_dt, s_dt)
+            elif keep:
+                # Se mueve conservando la duración.
+                dur = (dt.datetime.strptime(b["end"], "%Y-%m-%dT%H:%M")
+                       - dt.datetime.strptime(b["start"], "%Y-%m-%dT%H:%M"))
+                e_dt = s_dt + dur
+            else:
+                e_dt = s_dt + dt.timedelta(hours=1)
+            f.update(allDay=False, start=s_dt.strftime("%Y-%m-%dT%H:%M"), end=e_dt.strftime("%Y-%m-%dT%H:%M"))
+    return f
+
+
+def find_event(ev_id):
+    remote = read_json(REMOTE_FILE, {"events": []})
+    for e in apply_pending(remote.get("events", []), pending_ops()):
+        if e["id"] == ev_id:
+            return e
+    return None
+
+
+def after_edit(args):
+    rebuild(keep_error=True)
+    if getattr(args, "no_sync", False):
+        return 0
+    return sync_locked()
+
+
+def cmd_add(args):
+    with Lock():
+        if args.date is None:
+            args.date = dt.date.today().isoformat()
+        fields = norm_fields(args)
+        ev = {"id": "local-" + uuid.uuid4().hex[:12], "cal": args.cal or "local",
+              "title": "(sin título)", "location": "", "notes": ""}
+        ev.update(fields)
+        ops = pending_ops()
+        ops.append({"op": "create", "event": ev})
+        write_json(PENDING_FILE, ops)
+        print(ev["id"])
+        return after_edit(args)
+
+
+def cmd_update(args):
+    with Lock():
+        base = find_event(args.id)
+        if not base:
+            print("No existe " + args.id, file=sys.stderr)
+            return 1
+        if not base.get("writable", True):
+            print("Ese calendario es de solo lectura", file=sys.stderr)
+            return 1
+        fields = norm_fields(args, base)
+        ops = pending_ops()
+        # Si aún no ha subido, se reescribe la creación en vez de encolar otra cosa.
+        for op in ops:
+            if op["op"] == "create" and op["event"]["id"] == args.id:
+                op["event"].update(fields)
+                break
+        else:
+            if "start" in fields:
+                fields.setdefault("allDay", base["allDay"])
+            ops.append({"op": "update", "id": args.id, "cal": base["cal"], "fields": fields})
+        write_json(PENDING_FILE, ops)
+        return after_edit(args)
+
+
+def cmd_delete(args):
+    with Lock():
+        ops = pending_ops()
+        created_here = [o for o in ops if o["op"] == "create" and o["event"]["id"] == args.id]
+        if created_here:
+            ops = [o for o in ops if not (o["op"] == "create" and o["event"]["id"] == args.id)
+                   and o.get("id") != args.id]
+        else:
+            base = find_event(args.id)
+            if not base:
+                return 0
+            if not base.get("writable", True):
+                print("Ese calendario es de solo lectura", file=sys.stderr)
+                return 1
+            ops = [o for o in ops if o.get("id") != args.id]
+            ops.append({"op": "delete", "id": args.id, "cal": base["cal"]})
+        write_json(PENDING_FILE, ops)
+        return after_edit(args)
+
+
+# --------------------------------------------------------------------- recordatorios
+
+def remind():
+    minutes = int(config().get("remindMinutes", 10))
+    if minutes <= 0:
+        return
+    data = read_json(EVENTS_FILE, {"events": []})
+    notified = read_json(NOTIFIED_FILE, {})
+    now = dt.datetime.now()
+    changed = False
+    for ev in data.get("events", []):
+        if ev.get("allDay"):
+            continue
+        start = dt.datetime.strptime(ev["start"], "%Y-%m-%dT%H:%M")
+        key = ev["id"] + "@" + ev["start"]
+        if key in notified:
+            continue
+        if start - dt.timedelta(minutes=minutes) <= now < start:
+            left = int((start - now).total_seconds() // 60) + 1
+            body = "A las %s (en %d min)" % (ev["start"][11:16], left)
+            if ev.get("location"):
+                body += " · " + ev["location"]
+            subprocess.run(["notify-send", "-a", "Agenda", "-i", "x-office-calendar",
+                            "-u", "normal", ev["title"], body],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            notified[key] = time.time()
+            changed = True
+    cutoff = time.time() - 3 * 86400
+    pruned = {k: v for k, v in notified.items() if v > cutoff}
+    if changed or len(pruned) != len(notified):
+        write_json(NOTIFIED_FILE, pruned)
+
+
+def cmd_tick(args):
+    # Bajo el lock: con dos monitores hay dos paneles llamando a la vez.
+    with Lock():
+        remind()
+        meta = read_json(META_FILE, {})
+        every = float(config().get("syncMinutes", 5)) * 60
+        if time.time() - meta.get("lastAttempt", 0) >= every - 5:
+            rc = sync_locked()
+            remind()  # por si la sincronización ha traído algo inminente
+            return rc
+    return 0
+
+
+def cmd_status(args):
+    data = read_json(EVENTS_FILE, {})
+    print(json.dumps({k: data.get(k) for k in ("lastSync", "error", "google", "pending")},
+                     ensure_ascii=False, indent=1))
+    print("eventos:", len(data.get("events", [])))
+    return 0
+
+
+# --------------------------------------------------------------------- main
+
+def main():
+    p = argparse.ArgumentParser(prog="julss-agenda")
+    sub = p.add_subparsers(dest="cmd", required=True)
+    for name in ("auth", "logout", "sync", "tick", "status"):
+        sub.add_parser(name)
+
+    def fields(sp):
+        sp.add_argument("--title")
+        sp.add_argument("--date", help="AAAA-MM-DD")
+        sp.add_argument("--end-date", help="AAAA-MM-DD (varios días)")
+        sp.add_argument("--start", help="HH:MM")
+        sp.add_argument("--end", help="HH:MM")
+        sp.add_argument("--all-day", action="store_true")
+        sp.add_argument("--location")
+        sp.add_argument("--notes")
+        sp.add_argument("--no-sync", action="store_true")
+
+    a = sub.add_parser("add")
+    fields(a)
+    a.add_argument("--cal", help="id del calendario (por defecto el principal)")
+    u = sub.add_parser("update")
+    u.add_argument("id")
+    fields(u)
+    d = sub.add_parser("delete")
+    d.add_argument("id")
+    d.add_argument("--no-sync", action="store_true")
+
+    args = p.parse_args()
+    try:
+        return {"auth": cmd_auth, "logout": cmd_logout, "sync": cmd_sync, "tick": cmd_tick,
+                "status": cmd_status, "add": cmd_add, "update": cmd_update,
+                "delete": cmd_delete}[args.cmd](args)
+    except ValueError as e:
+        print("Dato no válido: %s" % e, file=sys.stderr)
+        return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

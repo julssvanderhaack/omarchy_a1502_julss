@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
@@ -86,6 +87,233 @@ Panel {
   readonly property int lifeDonePercent: Model.lifeProgressPercent(age, lifeExpectancy)
   property bool editingLife: false
 
+  // ---- julss: agenda. Los datos los lleva ~/.local/bin/julss-agenda
+  //      (caché local + cola offline + sincronización con Google Calendar);
+  //      el panel solo lee su events.json y le pasa órdenes.
+  readonly property string agendaBin: Quickshell.env("HOME") + "/.local/bin/julss-agenda"
+  readonly property string agendaFile: Quickshell.env("HOME") + "/.local/state/julss-agenda/events.json"
+  property var agenda: ({ events: [], google: {}, pending: 0 })
+  property var eventsByDay: ({})
+  property string selectedKey: todayKey
+  readonly property var selectedDate: {
+    var p = selectedKey.split("-")
+    return new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]))
+  }
+  readonly property var selectedEvents: eventsByDay[selectedKey] || []
+  readonly property bool googleConfigured: !!(agenda.google && agenda.google.configured)
+  readonly property bool googleConnected: !!(agenda.google && agenda.google.connected)
+  property bool agendaBusy: false
+  property string agendaMessage: ""
+  property var agendaQueue: []
+
+  property bool editingEvent: false
+  property string editId: ""
+  property bool editAllDay: false
+
+  function loadAgenda(text) {
+    var data
+    try { data = JSON.parse(text) } catch (e) { return }
+    var byDay = {}
+    var list = data.events || []
+    for (var i = 0; i < list.length; i++) {
+      var days = list[i].days || []
+      for (var j = 0; j < days.length; j++) {
+        if (!byDay[days[j]]) byDay[days[j]] = []
+        byDay[days[j]].push(list[i])
+      }
+    }
+    root.eventsByDay = byDay
+    root.agenda = data
+  }
+
+  function runAgenda(args) {
+    root.agendaQueue = root.agendaQueue.concat([args])
+    pumpAgenda()
+  }
+
+  function pumpAgenda() {
+    if (agendaProc.running || root.agendaQueue.length === 0) return
+    var next = root.agendaQueue[0]
+    root.agendaQueue = root.agendaQueue.slice(1)
+    root.agendaBusy = true
+    agendaProc.command = [root.agendaBin].concat(next)
+    agendaProc.running = true
+  }
+
+  function syncAgenda() {
+    if (root.agendaQueue.length === 0 && !agendaProc.running) runAgenda(["sync"])
+  }
+
+  function selectDay(cell) {
+    root.selectedKey = cell.key
+    if (!cell.inMonth) { root.viewYear = cell.year; root.viewMonth = cell.month }
+    if (root.editingEvent && root.editId === "")
+      dateField.text = root.labelLocale.toString(new Date(cell.year, cell.month, cell.day), "d/M/yyyy")
+  }
+
+  function pad2(n) { return (n < 10 ? "0" : "") + n }
+
+  // "9", "930", "9:30", "9.30", "09h30" → "09:30"; "" si no se entiende.
+  function parseTime(text) {
+    var t = String(text).trim().replace(/[.h]/g, ":")
+    var m = t.match(/^(\d{1,2})(?::?(\d{2}))?$/)
+    if (!m) return ""
+    var h = Number(m[1]), mi = m[2] ? Number(m[2]) : 0
+    if (h > 23 || mi > 59) return ""
+    return pad2(h) + ":" + pad2(mi)
+  }
+
+  // "5/11", "5/11/2026", "5-11-26", "2026-11-05" → "2026-11-05"; "" si no vale.
+  function parseDate(text) {
+    var t = String(text).trim()
+    var iso = t.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+    var y, mo, d
+    if (iso) { y = Number(iso[1]); mo = Number(iso[2]); d = Number(iso[3]) }
+    else {
+      var m = t.match(/^(\d{1,2})[\/\-.](\d{1,2})(?:[\/\-.](\d{2,4}))?$/)
+      if (!m) return ""
+      d = Number(m[1]); mo = Number(m[2])
+      y = m[3] ? Number(m[3]) : root.selectedDate.getFullYear()
+      if (y < 100) y += 2000
+    }
+    var probe = new Date(y, mo - 1, d)
+    if (probe.getMonth() !== mo - 1 || probe.getDate() !== d) return ""
+    return y + "-" + pad2(mo) + "-" + pad2(d)
+  }
+
+  function startNewEvent() {
+    root.editId = ""
+    root.editAllDay = false
+    root.editingEvent = true
+    root.agendaMessage = ""
+    Qt.callLater(function() {
+      titleField.text = ""
+      dateField.text = root.labelLocale.toString(root.selectedDate, "d/M/yyyy")
+      startField.text = ""
+      endField.text = ""
+      placeField.text = ""
+      titleField.forceActiveFocus()
+    })
+  }
+
+  function startEditEvent(ev) {
+    if (!ev.writable) return
+    root.editId = ev.id
+    root.editAllDay = !!ev.allDay
+    root.editingEvent = true
+    root.agendaMessage = ""
+    var p = ev.start.substring(0, 10).split("-")
+    Qt.callLater(function() {
+      titleField.text = ev.title
+      dateField.text = Number(p[2]) + "/" + Number(p[1]) + "/" + p[0]
+      startField.text = ev.allDay ? "" : ev.start.substring(11, 16)
+      endField.text = ev.allDay ? "" : ev.end.substring(11, 16)
+      placeField.text = ev.location || ""
+      titleField.forceActiveFocus()
+      titleField.selectAll()
+    })
+  }
+
+  function cancelEditEvent() {
+    root.editingEvent = false
+    Qt.callLater(function() { if (keyCatcher) keyCatcher.forceActiveFocus() })
+  }
+
+  function saveEvent() {
+    var date = parseDate(dateField.text)
+    if (date === "") { root.agendaMessage = "Fecha no válida (d/m/aaaa)"; return }
+    var args = root.editId === "" ? ["add"] : ["update", root.editId]
+    args.push("--title", titleField.text.trim() || "(sin título)", "--date", date, "--location", placeField.text.trim())
+    if (root.editAllDay) {
+      args.push("--all-day")
+    } else {
+      var st = parseTime(startField.text)
+      if (st === "") { root.agendaMessage = "Hora de inicio no válida (HH:MM)"; return }
+      args.push("--start", st)
+      if (endField.text.trim() !== "") {
+        var en = parseTime(endField.text)
+        if (en === "") { root.agendaMessage = "Hora de fin no válida (HH:MM)"; return }
+        args.push("--end", en)
+      }
+    }
+    root.selectedKey = date
+    var p = date.split("-")
+    root.viewYear = Number(p[0]); root.viewMonth = Number(p[1]) - 1
+    root.runAgenda(args)
+    root.cancelEditEvent()
+  }
+
+  function deleteEvent(id) {
+    root.runAgenda(["delete", id])
+    if (root.editingEvent && root.editId === id) root.cancelEditEvent()
+  }
+
+  function handleEventKey(event, next) {
+    if (event.key === Qt.Key_Escape) {
+      root.cancelEditEvent()
+      event.accepted = true
+    } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+      root.saveEvent()
+      event.accepted = true
+    } else if ((event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab) && next) {
+      next.selectAll()
+      next.forceActiveFocus()
+      event.accepted = true
+    }
+  }
+
+  function syncTooltip() {
+    if (!root.googleConfigured) return "Solo local: falta ~/.config/julss-agenda/client_secret.json"
+    if (!root.googleConnected || String(root.agenda.error || "").indexOf("volver a conectar") >= 0)
+      return "Conectar con Google Calendar"
+    var t = "Sincronizar con Google"
+    if (root.agenda.lastSync)
+      t += " · última " + root.labelLocale.toString(new Date(root.agenda.lastSync), "HH:mm")
+    if (root.agenda.pending > 0) t += " · " + root.agenda.pending + " sin subir"
+    return t
+  }
+
+  FileView {
+    id: agendaView
+    path: root.agendaFile
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: root.loadAgenda(text())
+  }
+
+  Process {
+    id: agendaProc
+    stderr: StdioCollector {
+      id: agendaErr
+      waitForEnd: true
+    }
+    onExited: function(code) {
+      root.agendaBusy = false
+      var err = agendaErr.text.trim()
+      if (code !== 0 && err !== "") root.agendaMessage = err.split("\n").pop()
+      agendaView.reload()
+      root.pumpAgenda()
+    }
+  }
+
+  // Recordatorios cada minuto; la sincronización periódica (cada 5 min) la
+  // decide el propio tick. Con varios monitores hay un panel por barra: el
+  // script lleva un lock, así que no se pisan.
+  Process { id: tickProc }
+  Timer {
+    interval: 60000
+    repeat: true
+    running: true
+    triggeredOnStart: true
+    onTriggered: {
+      if (!tickProc.running) {
+        tickProc.command = [root.agendaBin, "tick"]
+        tickProc.running = true
+      }
+    }
+  }
+
   // Unset falls through to the locale's own first day, so a fresh install
   // starts out matching the rest of the desktop rather than a hardcoded
   // convention. Clicking the grid's "W" heading writes the choice back to
@@ -129,6 +357,7 @@ Panel {
     // Dismissing the panel mid-edit would otherwise leave the inputs up,
     // waiting behind a closed popup for the next time it opens.
     if (root.editingLife) root.cancelEditingLife()
+    if (root.editingEvent) root.cancelEditEvent()
     root.controller.hide()
   }
 
@@ -155,11 +384,14 @@ Panel {
   function refresh() {
     root.today = new Date()
     root.goToToday()
+    root.selectedKey = Model.keyForDate(root.today)
+    root.syncAgenda()
   }
 
   function goToToday() {
     root.viewYear = today.getFullYear()
     root.viewMonth = today.getMonth()
+    root.selectedKey = Model.keyForDate(today)
   }
 
   function moveMonth(delta) {
@@ -279,7 +511,7 @@ Panel {
     PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      blocked: root.editingLife
+      blocked: root.editingLife || root.editingEvent
       onMoveRequested: function(dx, dy) {
         if (dx !== 0) root.moveMonth(dx)
         if (dy !== 0) root.moveYear(dy)
@@ -294,6 +526,7 @@ Panel {
         else if (t === "}") root.moveYear(1)
         else if (t === "t" || t === "T") root.goToToday()
         else if (t === "w" || t === "W") root.toggleWeekStart()
+        else if (t === "n" || t === "N" || t === "+") root.startNewEvent()
       }
 
       Flickable {
@@ -798,9 +1031,44 @@ Panel {
                       // over a grid this quiet.
                       color: root.isBabyDue(modelData)
                         ? Qt.rgba(Color.accent.r, Color.accent.g, Color.accent.b, 0.25)
-                        : "transparent"
+                        : (modelData.key === root.selectedKey
+                          ? Qt.rgba(root.contentForeground.r, root.contentForeground.g, root.contentForeground.b, 0.12)
+                          : (dayMouse.containsMouse ? Style.hoverFillFor(root.contentForeground, Color.accent) : "transparent"))
                       border.width: modelData.today || root.isBabyDue(modelData) ? Style.spacing.hairline : 0
                       border.color: root.isBabyDue(modelData) ? Color.accent : Style.normalBorderFor(root.contentForeground, Color.accent)
+
+                      // julss: clic = ver/añadir citas de ese día; doble clic = nueva cita.
+                      MouseArea {
+                        id: dayMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.selectDay(parent.modelData)
+                        onDoubleClicked: { root.selectDay(parent.modelData); root.startNewEvent() }
+                      }
+
+                      // julss: un punto por cita (máx. 3) con el color de su calendario.
+                      Row {
+                        readonly property var dayEvents: root.eventsByDay[parent.modelData.key] || []
+                        visible: dayEvents.length > 0
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        anchors.bottom: parent.bottom
+                        anchors.bottomMargin: Style.space(4)
+                        spacing: Style.space(3)
+
+                        Repeater {
+                          model: Math.min(3, parent.dayEvents.length)
+
+                          Rectangle {
+                            required property int index
+                            width: Style.space(5)
+                            height: width
+                            radius: width / 2
+                            color: parent.dayEvents[index].color || Color.accent
+                            opacity: parent.parent.modelData.inMonth ? 1 : 0.4
+                          }
+                        }
+                      }
 
                       Text {
                         textFormat: Text.PlainText
@@ -886,6 +1154,369 @@ Panel {
                 foreground: root.contentForeground
                 fontFamily: root.contentFontFamily
                 onClicked: root.moveMonth(1)
+              }
+            }
+          }
+
+          // ---- julss: agenda del día seleccionado.
+          Item {
+            width: parent.width
+            height: agendaColumn.height + Style.space(4)
+
+            Column {
+              id: agendaColumn
+              anchors.horizontalCenter: parent.horizontalCenter
+              width: gridColumn.width
+              spacing: Style.space(6)
+
+              Rectangle {
+                width: parent.width
+                height: Style.spacing.hairline
+                color: root.contentForeground
+                opacity: 0.1
+              }
+
+              // Cabecera: día elegido a la izquierda, estado + acciones a la derecha.
+              Item {
+                width: parent.width
+                height: Math.max(agendaTitle.implicitHeight, addButton.height)
+
+                Text {
+                  id: agendaTitle
+                  anchors.left: parent.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  textFormat: Text.PlainText
+                  text: "AGENDA · " + (root.selectedKey === root.todayKey
+                    ? "HOY"
+                    : root.labelLocale.toString(root.selectedDate, "ddd d MMM").toUpperCase())
+                  color: Qt.darker(root.contentForeground, 1.5)
+                  font.family: root.contentFontFamily
+                  font.pixelSize: Style.font.bodySmall
+                  font.letterSpacing: 1
+                }
+
+                Row {
+                  anchors.right: parent.right
+                  anchors.rightMargin: -Style.space(8)
+                  anchors.verticalCenter: parent.verticalCenter
+                  spacing: 0
+
+                  Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    rightPadding: Style.space(4)
+                    textFormat: Text.PlainText
+                    visible: text !== ""
+                    text: root.agendaBusy ? "sincronizando…"
+                      : (!root.googleConnected ? "solo local"
+                      : (root.agenda.pending > 0 ? root.agenda.pending + " sin subir" : ""))
+                    color: Qt.darker(root.contentForeground, 1.9)
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.caption
+                  }
+
+                  PanelActionButton {
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconText: root.googleConnected ? "󰑓" : "󰒍"
+                    tooltipText: root.syncTooltip()
+                    foreground: root.agenda.error ? Color.urgent : root.contentForeground
+                    fontFamily: root.contentFontFamily
+                    enabled: !root.agendaBusy
+                    onClicked: {
+                      // En modo «Prueba» Google caduca el acceso cada 7 días:
+                      // entonces el mismo botón vuelve a conectar.
+                      if (root.googleConfigured && String(root.agenda.error || "").indexOf("volver a conectar") >= 0)
+                        root.runAgenda(["auth"])
+                      else if (root.googleConnected) root.syncAgenda()
+                      else if (root.googleConfigured) root.runAgenda(["auth"])
+                      else root.agendaMessage = "Falta ~/.config/julss-agenda/client_secret.json (ver julss-agenda --help)"
+                    }
+                  }
+
+                  PanelActionButton {
+                    id: addButton
+                    anchors.verticalCenter: parent.verticalCenter
+                    iconText: "󰐕"
+                    tooltipText: "Nueva cita (n)"
+                    foreground: root.contentForeground
+                    fontFamily: root.contentFontFamily
+                    onClicked: root.startNewEvent()
+                  }
+                }
+              }
+
+              Text {
+                width: parent.width
+                visible: text !== ""
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
+                text: root.agendaMessage !== "" ? root.agendaMessage : (root.agenda.error || "")
+                color: Color.urgent
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              // ---- Formulario: nueva cita o edición.
+              Column {
+                visible: root.editingEvent
+                width: parent.width
+                spacing: Style.space(6)
+
+                TextField {
+                  id: titleField
+                  width: parent.width
+                  placeholderText: "Título de la cita"
+                  foreground: root.contentForeground
+                  font.family: root.contentFontFamily
+                  Keys.onPressed: function(event) { root.handleEventKey(event, dateField) }
+                }
+
+                Row {
+                  spacing: Style.space(6)
+
+                  TextField {
+                    id: dateField
+                    width: Style.space(112)
+                    anchors.verticalCenter: parent.verticalCenter
+                    placeholderText: "d/m/aaaa"
+                    foreground: root.contentForeground
+                    font.family: root.contentFontFamily
+                    Keys.onPressed: function(event) { root.handleEventKey(event, root.editAllDay ? placeField : startField) }
+                  }
+
+                  TextField {
+                    id: startField
+                    visible: !root.editAllDay
+                    width: Style.space(70)
+                    anchors.verticalCenter: parent.verticalCenter
+                    placeholderText: "09:00"
+                    foreground: root.contentForeground
+                    font.family: root.contentFontFamily
+                    Keys.onPressed: function(event) { root.handleEventKey(event, endField) }
+                  }
+
+                  Text {
+                    visible: !root.editAllDay
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "–"
+                    color: Qt.darker(root.contentForeground, 1.5)
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.body
+                  }
+
+                  TextField {
+                    id: endField
+                    visible: !root.editAllDay
+                    width: Style.space(70)
+                    anchors.verticalCenter: parent.verticalCenter
+                    placeholderText: "+1 h"
+                    foreground: root.contentForeground
+                    font.family: root.contentFontFamily
+                    Keys.onPressed: function(event) { root.handleEventKey(event, placeField) }
+                  }
+
+                  Item { width: Style.space(4); height: 1 }
+
+                  ToggleSwitch {
+                    anchors.verticalCenter: parent.verticalCenter
+                    checked: root.editAllDay
+                    cursorRing: false
+                    onToggled: root.editAllDay = !root.editAllDay
+                  }
+
+                  Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Todo el día"
+                    color: Qt.darker(root.contentForeground, 1.3)
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.bodySmall
+                  }
+                }
+
+                TextField {
+                  id: placeField
+                  width: parent.width
+                  placeholderText: "Lugar (opcional)"
+                  foreground: root.contentForeground
+                  font.family: root.contentFontFamily
+                  Keys.onPressed: function(event) { root.handleEventKey(event, titleField) }
+                }
+
+                Row {
+                  spacing: Style.space(8)
+
+                  Button {
+                    iconText: "󰄬"
+                    text: "Guardar"
+                    bordered: true
+                    foreground: root.contentForeground
+                    fontFamily: root.contentFontFamily
+                    onClicked: root.saveEvent()
+                  }
+
+                  Button {
+                    text: "Cancelar"
+                    foreground: root.contentForeground
+                    fontFamily: root.contentFontFamily
+                    onClicked: root.cancelEditEvent()
+                  }
+
+                  Button {
+                    visible: root.editId !== ""
+                    iconText: "󰆴"
+                    text: "Borrar"
+                    foreground: Color.urgent
+                    fontFamily: root.contentFontFamily
+                    onClicked: root.deleteEvent(root.editId)
+                  }
+                }
+              }
+
+              Text {
+                visible: !root.editingEvent && root.selectedEvents.length === 0
+                width: parent.width
+                horizontalAlignment: Text.AlignHCenter
+                topPadding: Style.space(4)
+                bottomPadding: Style.space(4)
+                text: "Nada en la agenda · doble clic en un día o «n» para añadir"
+                color: Qt.darker(root.contentForeground, 1.9)
+                font.family: root.contentFontFamily
+                font.pixelSize: Style.font.caption
+              }
+
+              // ---- Citas del día.
+              Repeater {
+                model: root.selectedEvents
+
+                Rectangle {
+                  id: eventRow
+                  required property var modelData
+                  width: agendaColumn.width
+                  height: Math.max(Style.space(34), eventText.implicitHeight + Style.space(10))
+                  radius: Style.cornerRadius
+                  color: rowHover.hovered && modelData.writable
+                    ? Style.hoverFillFor(root.contentForeground, Color.accent)
+                    : "transparent"
+
+                  HoverHandler { id: rowHover }
+
+                  MouseArea {
+                    id: eventMouse
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: eventRow.modelData.writable ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    onClicked: root.startEditEvent(eventRow.modelData)
+                  }
+
+                  Rectangle {
+                    id: eventBar
+                    x: Style.space(4)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Style.space(3)
+                    height: parent.height - Style.space(10)
+                    radius: width / 2
+                    color: eventRow.modelData.color || Color.accent
+                  }
+
+                  Text {
+                    id: eventTime
+                    anchors.left: eventBar.right
+                    anchors.leftMargin: Style.space(10)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Style.space(104)
+                    textFormat: Text.PlainText
+                    text: eventRow.modelData.time
+                    color: Qt.darker(root.contentForeground, 1.3)
+                    font.family: root.contentFontFamily
+                    font.pixelSize: Style.font.bodySmall
+                  }
+
+                  Column {
+                    id: eventText
+                    anchors.left: eventTime.right
+                    anchors.right: eventIcons.left
+                    anchors.rightMargin: Style.space(6)
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Text {
+                      width: parent.width
+                      elide: Text.ElideRight
+                      textFormat: Text.PlainText
+                      text: eventRow.modelData.title
+                      color: root.contentForeground
+                      font.family: root.contentFontFamily
+                      font.pixelSize: Style.font.body
+                      font.bold: true
+                    }
+
+                    Text {
+                      width: parent.width
+                      visible: text !== ""
+                      elide: Text.ElideRight
+                      textFormat: Text.PlainText
+                      text: [eventRow.modelData.location || "",
+                             root.googleConnected && eventRow.modelData.calName !== "Local" ? eventRow.modelData.calName : ""]
+                            .filter(function(s) { return s !== "" }).join(" · ")
+                      color: Qt.darker(root.contentForeground, 1.7)
+                      font.family: root.contentFontFamily
+                      font.pixelSize: Style.font.caption
+                    }
+                  }
+
+                  Row {
+                    id: eventIcons
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Text {
+                      anchors.verticalCenter: parent.verticalCenter
+                      visible: !!eventRow.modelData.pending
+                      rightPadding: Style.space(4)
+                      text: "󰔟"
+                      color: Qt.darker(root.contentForeground, 1.7)
+                      font.family: root.contentFontFamily
+                      font.pixelSize: Style.font.body
+                    }
+
+                    Text {
+                      anchors.verticalCenter: parent.verticalCenter
+                      visible: !!eventRow.modelData.recurring
+                      rightPadding: Style.space(4)
+                      text: "󰑖"
+                      color: Qt.darker(root.contentForeground, 1.7)
+                      font.family: root.contentFontFamily
+                      font.pixelSize: Style.font.body
+                    }
+
+                    Text {
+                      anchors.verticalCenter: parent.verticalCenter
+                      visible: !eventRow.modelData.writable
+                      rightPadding: Style.space(4)
+                      text: "󰌾"
+                      color: Qt.darker(root.contentForeground, 1.7)
+                      font.family: root.contentFontFamily
+                      font.pixelSize: Style.font.body
+                    }
+
+                    PanelActionButton {
+                      anchors.verticalCenter: parent.verticalCenter
+                      visible: eventRow.modelData.writable && rowHover.hovered
+                      iconText: "󰆴"
+                      tooltipText: eventRow.modelData.recurring ? "Borrar esta vez" : "Borrar"
+                      foreground: root.contentForeground
+                      fontFamily: root.contentFontFamily
+                      onClicked: root.deleteEvent(eventRow.modelData.id)
+                    }
+                  }
+
+                  PanelToolTip {
+                    visible: rowHover.hovered && (eventRow.modelData.notes || !eventRow.modelData.writable || eventRow.modelData.pending)
+                    text: [eventRow.modelData.notes || "",
+                           eventRow.modelData.pending ? "Pendiente de subir a Google" : "",
+                           !eventRow.modelData.writable ? "Calendario de solo lectura" : ""]
+                          .filter(function(s) { return s !== "" }).join("\n")
+                    fontFamily: root.contentFontFamily
+                  }
+                }
               }
             }
           }

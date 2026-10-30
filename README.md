@@ -11,6 +11,7 @@ omarchy/
 ├── shell.json                  # ~/.config/omarchy/shell.json — layout de la barra
 └── extensions/omarchy-menu.jsonc  # ~/.config/omarchy/extensions/omarchy-menu.jsonc
 bin/                            # ~/.local/bin/ — scripts usados por el menú
+├── julss-agenda                # Agenda del calendario (julss.clock): caché local + cola offline + sincronización con Google Calendar
 ├── julss-flatpak               # Abre el gestor Flatpak (julss.flatpak); con un fichero, lo instala (lo usa Archivos)
 ├── julss-flatpak-install       # Instalar → Flatpak (fzf sobre Flathub)
 ├── julss-flatpak-remove        # Desinstalar → Flatpak
@@ -33,7 +34,7 @@ plugins/                        # Plugins propios de la barra (~/.config/omarchy
 ├── julss.weather/              # Tiempo en castellano + ubicación automática sin Google (Wi-Fi recordada → BeaconDB/OSM → IP) o manual
 ├── julss.wifiqr/               # QR de la Wi-Fi, en castellano
 ├── julss.audio/                # Panel Sonido en castellano + sección APLICACIONES siempre visible (volumen y silencio por app)
-├── julss.clock/                # Reloj con segundos + calendario, en castellano (locale es_ES); el panel se ensancha con meses largos
+├── julss.clock/                # Reloj con segundos + calendario, en castellano (locale es_ES); el panel se ensancha con meses largos; agenda con citas sincronizadas con Google Calendar (bin/julss-agenda)
 ├── julss.lan/                  # Red local: escanea la LAN (ping + vecinos + mDNS/DNS/NetBIOS/UPnP) y lista dispositivos con nombre, IP y fabricante
 ├── julss.fan/                  # Ventilador: curva temperatura → rpm de mbpfan (clic en VENTILADOR del monitor); necesita mbpfan parcheado (PR #273) y /usr/local/bin/julss-fan-apply
 ├── julss.disk/                 # Almacenamiento: reparto del disco en queso, anillos, mapa o árbol, navegando por carpetas (clic en DISCO del monitor)
@@ -294,3 +295,19 @@ dofile(os.getenv("HOME") .. "/.config/omarchy/plugins/vbrosseau.alttab/omarchy-p
 
 Sin eso, el plugin muestra una notificación de error porque no encuentra su
 keybinding.
+
+## Agenda y Google Calendar
+
+El calendario del reloj (`julss.clock`) lleva una agenda: clic en un día para ver
+sus citas, doble clic o `n` para crear una, clic en una cita para editarla. Funciona
+en local sin más; para sincronizar con Google Calendar en los dos sentidos:
+
+1. En console.cloud.google.com crea un proyecto, habilita **Google Calendar API**,
+   rellena «Información de la marca» y en «Público» añade tu correo como usuario de
+   prueba (en modo prueba el acceso caduca cada 7 días; se reconecta con el botón de
+   sincronizar del panel).
+2. Crea un cliente OAuth de tipo **Aplicación de escritorio**, descarga el JSON y
+   guárdalo como `~/.config/julss-agenda/client_secret.json`.
+3. Ejecuta `julss-agenda auth`.
+
+Las credenciales (`client_secret.json`, `token.json`) no están en el repo.
