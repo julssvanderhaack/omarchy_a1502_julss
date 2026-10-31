@@ -441,7 +441,9 @@ Panel {
     // connectedWifiNetwork when handed null, so a row left stale by scan churn
     // would otherwise tear down whatever is connected now instead.
     if (net.connected) { disconnectRow(net.ssid); return }
-    if (requiresCredentials(net.security) && !net.known) { openPasswordPrompt(net.ssid); return }
+    // A known network whose last connect just failed gets the prompt instead
+    // of another retry with the stale saved passphrase.
+    if (requiresCredentials(net.security) && (!net.known || failureSsid === net.ssid)) { openPasswordPrompt(net.ssid); return }
     connectDirectly(net.ssid)
   }
 
@@ -1762,7 +1764,7 @@ Panel {
       anchors.top: parent.top
       height: rowBody.implicitHeight
       hoverEnabled: true
-      acceptedButtons: Qt.LeftButton
+      acceptedButtons: Qt.LeftButton | Qt.RightButton
       cursorShape: Qt.PointingHandCursor
       enabled: !root.busy
 
@@ -1771,7 +1773,7 @@ Panel {
       // subsequent j/k pick up from this row).
       onContainsMouseChanged: if (containsMouse) { root.cursorActive = true; root.focusSection = "wifi"; root.selectedIndex = row.index; root.wifiActionFocused = false }
 
-      onClicked: {
+      onClicked: mouse => {
         if (!row.net) return
         // Resync cursor in case keyboard nav moved it away while the mouse
         // stayed parked on this row — the click target is unambiguously here.
@@ -1779,11 +1781,17 @@ Panel {
         root.focusSection = "wifi"
         root.selectedIndex = row.index
         root.wifiActionFocused = false
+        // Right click edits the saved passphrase (e.g. after the router's
+        // password changed); submitting overwrites the stored PSK.
+        if (mouse.button === Qt.RightButton) {
+          if (row.requiresCredentials && !row.isEnterprise) root.openPasswordPrompt(row.net.ssid)
+          return
+        }
         if (row.isConnected) {
           root.disconnectRow(row.net.ssid)
           return
         }
-        if (row.requiresCredentials && !row.isKnown) {
+        if (row.requiresCredentials && (!row.isKnown || row.isFailed)) {
           root.openPasswordPrompt(row.net.ssid)
           return
         }

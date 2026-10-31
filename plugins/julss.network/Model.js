@@ -329,6 +329,8 @@ function networkFailureReason(reason, needsCredentials, reasons) {
   var r = reasons || {}
   if (needsCredentials && reason === r.NoSecrets) return "Se necesita contraseña"
   if (needsCredentials && reason === r.WifiAuthTimeout) return "Contraseña incorrecta"
+  // A changed PSK fails the 4-way handshake: NM reports supplicant-disconnect.
+  if (needsCredentials && reason === r.WifiClientDisconnected) return "Contraseña incorrecta"
   if (reason === r.WifiNetworkLost) return "Red perdida"
   if (reason === r.WifiClientDisconnected) return "Desconectado"
   if (reason === r.WifiClientFailed) return "Fallo de conexión"
@@ -340,11 +342,14 @@ function networkFailureReason(reason, needsCredentials, reasons) {
 // An auth timeout on such a network means the saved passphrase is wrong (the
 // same profile a first failed attempt leaves behind as "known"), so the user
 // needs a chance to re-enter it -- connectWithPsk overwrites the stored PSK on
-// submit.
+// submit. A wrong PSK usually fails the 4-way handshake first, which
+// NetworkManager reports as supplicant-disconnect/-failed (WifiClient*), and
+// the later NoSecrets no longer counts as ours, so those reprompt too.
 function shouldRepromptPassphrase(reason, needsCredentials, reasons) {
   var r = reasons || {}
   if (!needsCredentials) return false
   return reason === r.NoSecrets || reason === r.WifiAuthTimeout
+    || reason === r.WifiClientDisconnected || reason === r.WifiClientFailed
 }
 
 if (typeof module !== "undefined") {
