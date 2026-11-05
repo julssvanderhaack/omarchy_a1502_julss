@@ -382,13 +382,14 @@ Panel {
     id: button
     anchors.fill: parent
     bar: root.bar
-    foreground: root.batteryLevelColor
-    text: root.showPercentage && !vertical
-      ? root.batteryIcon() + " " + root.batteryPercent + "%"
-      : root.batteryIcon()
-    // With the percentage shown, only the icon takes the level colour: the
-    // two are drawn as separate texts instead of the single glyph string.
-    iconComponent: (root.showPercentage && !vertical) || root.batteryCritical ? percentAndIcon : null
+    // julss: con porcentaje o en crítico dibujamos nuestra fila encima
+    // (percentOverlay). BarIconButton escala iconComponent a un lienzo de
+    // ~12 px desde Omarchy 4.5, lo que dejaba icono y «83%» diminutos, así
+    // que el glifo propio del botón se queda transparente (y sigue contando
+    // como contenido visible).
+    readonly property bool customContent: (root.showPercentage && !vertical) || root.batteryCritical
+    foreground: customContent ? "transparent" : root.batteryLevelColor
+    text: root.batteryIcon()
     // julss: más junto, pero crece si el texto no cabe (con «100%» se salía
     // de la ranura y se pegaba al widget de la izquierda).
     slotSize: root.showPercentage && !vertical
@@ -400,6 +401,16 @@ Panel {
       if (b === Qt.RightButton) root.togglePercentage()
       else root.toggle()
     }
+  }
+
+  Loader {
+    id: percentOverlay
+    active: button.customContent
+    anchors.centerIn: button
+    width: button.width
+    height: button.height
+    scale: button.pressScale
+    sourceComponent: percentAndIcon
   }
 
   TextMetrics {
